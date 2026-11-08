@@ -1,0 +1,65 @@
+# SPDX-License-Identifier: MIT
+# SPDX-FileCopyrightText: 2026 SEN Labs e.U.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  core:
+    name: Core tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install nlohmann/json
+        run: |
+          if [ "$RUNNER_OS" = Linux ]; then sudo apt-get update && sudo apt-get install -y nlohmann-json3-dev; else brew install nlohmann-json; fi
+      - name: Build and run the tests of the portable core
+        run: |
+          if [ "$RUNNER_OS" = macOS ]; then export JSON_INCLUDE="$(brew --prefix nlohmann-json)/include"; fi
+          sh tests/run.sh
+
+  haiku:
+    name: Build, test and package on Haiku
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Start Haiku VM
+        uses: cross-platform-actions/action@v1.6.0
+        with:
+          operating_system: haiku
+          architecture: x86-64
+          version: 'r1beta6'
+
+      # the steps below run inside the VM, files are synced both ways
+      - name: Install build dependencies
+        shell: cpa.sh {0}
+        run: pkgman install -y cmd:gcc gcc_syslibs_devel cmd:make nlohmann_json
+
+      - name: Core tests
+        shell: cpa.sh {0}
+        run: sh tests/run.sh
+
+      - name: Build
+        shell: cpa.sh {0}
+        run: ./build.sh
+
+      - name: The server through the tool (a position by hand, the limits of programs; no network needed)
+        shell: cpa.sh {0}
+        run: |
+          # (the part of tests/vm/server.sh that looks the place up on the internet is skipped here: NO_NETWORK=1)
+          NO_NETWORK=1 sh tests/vm/server.sh
+
+      - name: Package
+        shell: cpa.sh {0}
+        run: ./package.sh
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: basho-packages
+          path: "*.hpkg"

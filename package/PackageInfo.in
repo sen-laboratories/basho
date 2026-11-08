@@ -1,0 +1,29 @@
+name			basho
+version			@VERSION@
+architecture	@ARCH@
+summary			"The location server of Haiku (Basho)"
+description		"Basho (場所, place) knows roughly where this computer is and tells the programs that ask. It looks the
+place up from the internet address at a public service (only if you agree, the first time), keeps it in memory,
+and tells subscribers when it changes. You decide how much of it each program may know: the city, the region, the
+country or nothing, for all programs or for single ones. It needs no key and nothing else: SEN uses it for contexts
+that follow the city you are in, but any program can ask. The command location shows and sets what it knows."
+packager		"Gregor B. Rosenauer <semantic.extensions@gmail.com>"
+vendor			"SEN Labs e.U."
+copyrights		{
+	"2026 SEN Labs e.U."
+}
+licenses		{
+	"MIT"
+}
+urls			{
+	"https://github.com/sen-laboratories/basho"
+	"https://sen-labs.org"
+}
+provides		{
+	basho = @VERSION@
+	cmd:location = @VERSION@
+	cmd:location_server = @VERSION@
+}
+requires		{
+	haiku
+}

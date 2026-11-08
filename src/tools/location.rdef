@@ -1,0 +1,21 @@
+/*
+ * SPDX-License-Identifier: MIT
+ * SPDX-FileCopyrightText: 2026 SEN Labs e.U.
+ */
+resource app_signature "application/x-vnd.basho-location_tool";
+
+resource app_flags B_MULTIPLE_LAUNCH | B_BACKGROUND_APP;
+
+resource app_version {
+	major = 0,
+	middle = 1,
+	minor = 0,
+
+	/* 0 = development	1 = alpha			2 = beta
+	   3 = gamma		4 = golden master	5 = final */
+	variety = 0,
+	internal = 1,
+
+	short_info = "location",
+	long_info = "Asks the Basho location server where this computer is, and sets what programs may know."
+};

@@ -1,0 +1,19 @@
+# macOS leftovers: never commit
+.DS_Store
+._*
+.AppleDouble
+.LSOverride
+.Spotlight-V100
+.Trashes
+.fseventsd
+__MACOSX/
+
+# build results
+bin/
+lib/
+objects/
+package-build/
+*.rsrc
+*.o
+*.a
+*.hpkg

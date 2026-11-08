@@ -1,0 +1,24 @@
+name			basho_devel
+version			@VERSION@
+architecture	@ARCH@
+summary			"The location server of Haiku (Basho), development files"
+description		"The headers (location/Location.h: the protocol, location/LocationClient.h: BLocationClient) and the static
+library liblocation.a for programs that want to know where the computer is."
+packager		"Gregor B. Rosenauer <semantic.extensions@gmail.com>"
+vendor			"SEN Labs e.U."
+copyrights		{
+	"2026 SEN Labs e.U."
+}
+licenses		{
+	"MIT"
+}
+urls			{
+	"https://github.com/sen-laboratories/basho"
+}
+provides		{
+	basho_devel = @VERSION@
+	devel:liblocation = @VERSION@
+}
+requires		{
+	basho == @VERSION@ base
+}
