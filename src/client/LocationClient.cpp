@@ -173,7 +173,7 @@ BLocationClient::GetStatus(BMessage* status, bigtime_t timeout)
 
 
 status_t
-BLocationClient::GetSettings(BMessage* settings, BMessage* schema)
+BLocationClient::GetSettings(BMessage* settings, BMessage* schema, BMessage* defaults)
 {
 	BMessage request(LOCATION_SETTINGS);
 	BMessage reply;
@@ -187,6 +187,8 @@ BLocationClient::GetSettings(BMessage* settings, BMessage* schema)
 		reply.FindMessage("settings", settings);
 	if (schema != NULL)
 		reply.FindMessage("schema", schema);
+	if (defaults != NULL)
+		reply.FindMessage("defaults", defaults);
 	return B_OK;
 }
 
@@ -209,12 +211,17 @@ BLocationClient::ApplySettings(const BMessage& changes, BString* detail)
 status_t
 BLocationClient::SetProgramLimit(const char* signature, const char* level, BString* detail)
 {
-	// (the path key of a program's field: the dots of the signature are escaped, as the settings window does it)
-	BString key("programs.");
+	// (the name of a program's field: the dots of the signature are written as %2E, as the settings message does it; a backslash and a percent sign, too)
+	BString key("program:");
 	for (const char* c = signature; *c != '\0'; c++) {
-		if (*c == '.' || *c == '\\')
-			key << '\\';
-		key << *c;
+		if (*c == '.')
+			key << "%2E";
+		else if (*c == '\\')
+			key << "%5C";
+		else if (*c == '%')
+			key << "%25";
+		else
+			key << *c;
 	}
 	BMessage changes;
 	changes.AddString(key.String(), level);

@@ -4,16 +4,20 @@
  */
 #include "SettingsMessage.h"
 
+#include "ProgramKey.h"
 #include "Providers.h"
 
 #include <Message.h>
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
+#include <set>
 
 namespace basho {
 
-const char* const kProgramsField = "programs";
+const char* const kProgramPrefix = "program:";
+const char* const kProgramNamePrefix = "programname:";
 const char* const kProgramDefault = "default";
 
 // the names of the attributes of a field in the schema (sento: SenSettingsForm.h)
@@ -31,32 +35,31 @@ static const char* const kVersion = "version";
 
 
 std::string
-ProgramPathKey(const std::string& signature)
+ProgramFieldName(const std::string& signature)
 {
-	std::string key = std::string(kProgramsField) + ".";
-	for (char c : signature) {
-		if (c == '.' || c == '\\')
-			key += '\\';
-		key += c;
-	}
-	return key;
+	return std::string(kProgramPrefix) + EncodeProgramKey(signature);
 }
 
 
-std::vector<std::string>
-SplitPathKey(const std::string& key)
+std::string
+ProgramNameFieldName(const std::string& signature)
 {
-	std::vector<std::string> parts(1);
-	for (size_t i = 0; i < key.size(); i++) {
-		if (key[i] == '\\' && i + 1 < key.size()) {
-			parts.back() += key[++i];
-		} else if (key[i] == '.') {
-			parts.emplace_back();
-		} else {
-			parts.back() += key[i];
-		}
-	}
-	return parts;
+	return std::string(kProgramNamePrefix) + EncodeProgramKey(signature);
+}
+
+
+std::string
+ProgramPathKey(const std::string& signature)
+{
+	// (the same: nothing in the name needs an escape)
+	return ProgramFieldName(signature);
+}
+
+
+std::string
+SignatureOfField(const std::string& name)
+{
+	return SignatureOfProgramField(name);
 }
 
 
@@ -127,7 +130,7 @@ NameOf(const std::string& signature)
 }
 
 
-static void
+static int32
 FillValues(const Settings& settings, const std::vector<SeenProgram>& seen, BMessage* values, BMessage* schema)
 {
 	values->AddString("network_lookup", NetworkLookupName(settings.networkLookup));
@@ -139,8 +142,7 @@ FillValues(const Settings& settings, const std::vector<SeenProgram>& seen, BMess
 	values->AddInt32("confirmations", settings.confirmations);
 	values->AddInt32("min_refresh_seconds", settings.minRefreshSeconds);
 
-	// the programs: those that have a rule, and those that have asked
-	BMessage programs;
+	// the programs: those that have a rule, and those that have asked; each is a row of the form (after the general limit)
 	std::vector<std::pair<std::string, std::string>> listed;		// signature, name
 	for (const Settings::ProgramRule& rule : settings.programs)
 		listed.push_back({rule.signature, NameOf(rule.signature)});
@@ -152,22 +154,28 @@ FillValues(const Settings& settings, const std::vector<SeenProgram>& seen, BMess
 		else if (!program.name.empty())
 			found->second = program.name;
 	}
-	int32 order = 0;
+	// (the place of a field among the others is its number in the order: the programs come after the two settings that they depend on)
+	int32 order = 2;
 	for (const auto& program : listed) {
 		const Settings::ProgramRule* rule = settings.FindProgram(program.first);
 		const std::string level = rule != NULL ? GranularityName(rule->limit) : std::string(kProgramDefault);
-		programs.AddString(program.first.c_str(), level.c_str());
+		values->AddString(ProgramFieldName(program.first).c_str(), level.c_str());
+		values->AddString(ProgramNameFieldName(program.first).c_str(), program.second.c_str());
 		if (schema != NULL) {
+			// (the name is for the table of the settings view; the generic form does not show it)
+			BMessage hidden;
+			hidden.AddBool("hidden", true);
+			schema->AddMessage(ProgramNameFieldName(program.first).c_str(), &hidden);
 			BMessage attributes;
-			attributes.AddString(kLabel, program.second.c_str());
+			attributes.AddString(kLabel, (program.second + " may know").c_str());
 			attributes.AddString(kHelp, program.first.c_str());
 			attributes.AddString(kKind, "choice");
-			AddLevels(&attributes, true, level, ("As for the others (" + std::string(GranularityName(settings.maxPrecision)) + ")").c_str());
+			AddLevels(&attributes, true, level, ("As the others (" + GranularityName(settings.maxPrecision) + ")").c_str());
 			attributes.AddInt32(kOrder, order++);
 			schema->AddMessage(ProgramPathKey(program.first).c_str(), &attributes);
 		}
 	}
-	values->AddMessage(kProgramsField, &programs);
+	return (int32)listed.size();
 }
 
 
@@ -176,7 +184,8 @@ DescribeSettings(const Settings& settings, const std::vector<SeenProgram>& seen,
 {
 	// the values (and the fields of the programs in the schema, which come from the same list)
 	BMessage scratch;
-	FillValues(settings, seen, values != NULL ? values : &scratch, schema);
+	const int32 programs = FillValues(settings, seen, values != NULL ? values : &scratch, schema);
+	const int32 after = 2 + programs;		// (the place of the settings that come after the programs)
 
 	// the schema: the form of the settings
 	if (schema != NULL) {
@@ -195,29 +204,23 @@ DescribeSettings(const Settings& settings, const std::vector<SeenProgram>& seen,
 
 		BMessage precision;
 		precision.AddString(kLabel, "Programs may know");
-		precision.AddString(kHelp, "The finest location that programs are told, unless they have a limit of their own (below). A program can ask for less than this, never for more. The server keeps the finest fix it has.");
+		precision.AddString(kHelp, "The finest location that programs are told, unless they have a limit of their own (the programs that have asked are listed below). A program can ask for less than this, never for more. The server keeps the finest fix it has.");
 		precision.AddString(kKind, "choice");
 		AddLevels(&precision, false, GranularityName(settings.maxPrecision), "");
 		precision.AddInt32(kOrder, 1);
 		schema->AddMessage("max_precision", &precision);
 
-		BMessage programs;
-		programs.AddString(kLabel, "Programs");
-		programs.AddString(kHelp, "The programs that have asked where this computer is, and what each may be told. A program that is not here yet shows up after its first request.");
-		programs.AddInt32(kOrder, 2);
-		schema->AddMessage(kProgramsField, &programs);
-
 		BMessage providers;
 		providers.AddString(kLabel, "Lookup services");
 		providers.AddString(kHelp, "In this order, until one answers: ipwho.is, geojs, ipinfo (https), ip-api (http only).");
 		providers.AddBool(kList, true);
-		providers.AddInt32(kOrder, 3);
+		providers.AddInt32(kOrder, after);
 		schema->AddMessage("providers", &providers);
 
-		AddNumberField(schema, "interval_minutes", "Look again every (minutes)", "Also when the network changes.", 5, 1440, 4);
-		AddNumberField(schema, "min_move_km", "The same place within (km)", "A new fix within this distance of the announced one is the same place.", 1, 500, 5);
-		AddNumberField(schema, "confirmations", "Lookups that must agree on a move", "A move is announced when this many lookups in a row say the same.", 1, 5, 6);
-		AddNumberField(schema, "min_refresh_seconds", "Lookups at most every (seconds)", "However often a program asks.", 10, 3600, 7);
+		AddNumberField(schema, "interval_minutes", "Look again every (minutes)", "Also when the network changes.", 5, 1440, after + 1);
+		AddNumberField(schema, "min_move_km", "The same place within (km)", "A new fix within this distance of the announced one is the same place.", 1, 500, after + 2);
+		AddNumberField(schema, "confirmations", "Lookups that must agree on a move", "A move is announced when this many lookups in a row say the same.", 1, 5, after + 3);
+		AddNumberField(schema, "min_refresh_seconds", "Lookups at most every (seconds)", "However often a program asks.", 10, 3600, after + 4);
 	}
 
 	// the defaults: what Defaults puts back (every program without a limit of its own)
@@ -225,14 +228,11 @@ DescribeSettings(const Settings& settings, const std::vector<SeenProgram>& seen,
 		Settings withoutRules;
 		FillValues(withoutRules, seen, defaults, NULL);
 		// (the programs that are only in the rules, not seen, are listed too, with no limit)
-		BMessage programs;
-		defaults->FindMessage(kProgramsField, &programs);
 		for (const Settings::ProgramRule& rule : settings.programs) {
-			if (!programs.HasString(rule.signature.c_str()))
-				programs.AddString(rule.signature.c_str(), kProgramDefault);
+			const std::string name = ProgramFieldName(rule.signature);
+			if (!defaults->HasString(name.c_str()))
+				defaults->AddString(name.c_str(), kProgramDefault);
 		}
-		defaults->RemoveName(kProgramsField);
-		defaults->AddMessage(kProgramsField, &programs);
 	}
 }
 
@@ -294,12 +294,12 @@ ApplySettingsChanges(Settings* settings, const BMessage& changes, std::vector<st
 			refused->push_back(name);
 	};
 
+	std::set<std::string> sentPrograms;
 	char* rawName;
 	type_code type;
 	int32 count;
 	for (int32 i = 0; changes.GetInfo(B_ANY_TYPE, i, &rawName, &type, &count) == B_OK; i++) {
 		const std::string name = rawName;
-		const std::vector<std::string> path = SplitPathKey(name);
 
 		if (name == "network_lookup") {
 			const char* value = changes.GetString(rawName, "");
@@ -349,29 +349,23 @@ ApplySettingsChanges(Settings* settings, const BMessage& changes, std::vector<st
 			} else {
 				settings->minRefreshSeconds = value;
 			}
-		} else if (name == kProgramsField && type == B_MESSAGE_TYPE) {
-			// the whole group (after Revert or Defaults): the rules are what it says
-			BMessage group;
-			changes.FindMessage(rawName, &group);
-			std::vector<std::string> before;
-			for (const Settings::ProgramRule& rule : settings->programs)
-				before.push_back(rule.signature);
-			char* programName;
-			type_code programType;
-			for (int32 p = 0; group.GetInfo(B_STRING_TYPE, p, &programName, &programType) == B_OK; p++) {
-				if (!ApplyProgram(settings, programName, group.GetString(programName, "")))
-					refuse(std::string(kProgramsField) + "." + programName);
-			}
-			// (a rule for a program that is not in the group any more is gone)
-			for (const std::string& signature : before) {
-				if (!group.HasString(signature.c_str()))
-					settings->RemoveProgram(signature);
-			}
-		} else if (path.size() == 2 && path[0] == kProgramsField) {
-			if (!ApplyProgram(settings, path[1], changes.GetString(rawName, "")))
+		} else if (!SignatureOfField(name).empty()) {
+			const std::string signature = SignatureOfField(name);
+			sentPrograms.insert(signature);
+			if (!ApplyProgram(settings, signature, changes.GetString(rawName, "")))
 				refuse(name);
 		}
 		// (a field that is none of these is not a setting of this server: left alone)
+	}
+	// the whole message (Revert, Defaults): a program that it does not name has no limit of its own any more
+	if (changes.HasString("network_lookup") && changes.HasString("max_precision")) {
+		std::vector<std::string> before;
+		for (const Settings::ProgramRule& rule : settings->programs)
+			before.push_back(rule.signature);
+		for (const std::string& signature : before) {
+			if (sentPrograms.count(signature) == 0)
+				settings->RemoveProgram(signature);
+		}
 	}
 	return allValid ? B_OK : B_BAD_VALUE;
 }

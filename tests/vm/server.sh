@@ -107,7 +107,7 @@ check "the rule is in the settings file" grep -q "^program $TOOL country" "$SETT
 check "none: B_NOT_ALLOWED, exit status 2" test $code -eq 2
 check "none: it cannot subscribe either" sh -c "! '$BIN/location' watch"
 "$BIN/location" config > "$T/p-config.txt" 2>&1
-check "the program is listed with its limit (found by the signature of its application)" grep -q "$TOOL  *none" "$T/p-config.txt"
+check "the program is listed with its limit (found by the signature of its application)" grep -q "^program $TOOL  *none" "$T/p-config.txt"
 "$BIN/location" grant $TOOL default
 "$BIN/location" get > "$T/p-default.txt" 2>&1
 check "default takes the rule away: the general limit again" grep -q "^granularity region" "$T/p-default.txt"
