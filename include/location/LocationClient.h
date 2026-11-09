@@ -2,8 +2,7 @@
  * SPDX-License-Identifier: MIT
  * SPDX-FileCopyrightText: 2026 SEN Labs e.U.
  */
-#ifndef _LOCATION_CLIENT_H_
-#define _LOCATION_CLIENT_H_
+#pragma once
 
 #include <Messenger.h>
 #include <OS.h>
@@ -14,16 +13,16 @@ class BMessage;
 /**
  * The convenience class for programs that want to know where the machine is. Needs a BApplication in the program (it uses the roster to find, and if need be to start, the server).
  *
- *   BLocationClient client;
+ *   LocationClient client;
  *   client.StartWatching(BMessenger(this));          // then LOCATION_CHANGED arrives in MessageReceived()
  *
  *   double latitude, longitude; BString city;
  *   if (client.GetCurrentLocation(&latitude, &longitude, &city) == B_OK) ...
  */
-class BLocationClient {
+class LocationClient {
 public:
-							BLocationClient();
-							~BLocationClient();
+							LocationClient();
+							~LocationClient();
 
 	/** Whether the server runs. */
 	static bool				IsRunning();
@@ -64,5 +63,3 @@ private:
 
 	BMessenger				fServer;
 };
-
-#endif	// _LOCATION_CLIENT_H_

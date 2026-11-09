@@ -146,7 +146,7 @@ private:
 	int _Run()
 	{
 		const std::string command = fArgs.empty() ? "get" : fArgs[0];
-		BLocationClient client;
+		LocationClient client;
 
 		// (options after the command: --force, --granularity G)
 		bool force = false;
@@ -253,7 +253,7 @@ private:
 			return result == B_OK ? 0 : 1;
 		}
 		if (command == "running")
-			return BLocationClient::IsRunning() ? 0 : 1;
+			return LocationClient::IsRunning() ? 0 : 1;
 		if (command == "quit") {
 			BMessenger server(LOCATION_SERVER_SIGNATURE);
 			if (!server.IsValid())

@@ -31,7 +31,7 @@ static const char* kOther = "application/x-vnd.basho-test.other";
 
 // the row of a program in the settings, -1 if it has none; fills `row`
 static int32
-Find(BLocationClient& client, const char* signature, BMessage* row)
+Find(LocationClient& client, const char* signature, BMessage* row)
 {
 	BMessage settings;
 	if (client.GetSettings(&settings) != B_OK)
@@ -48,7 +48,7 @@ Find(BLocationClient& client, const char* signature, BMessage* row)
 }
 
 static status_t
-Set(BLocationClient& client, const char* path, const char* text)
+Set(LocationClient& client, const char* path, const char* text)
 {
 	BMessage changes;
 	changes.AddString(path, text);
@@ -56,7 +56,7 @@ Set(BLocationClient& client, const char* path, const char* text)
 }
 
 static status_t
-Allow(BLocationClient& client, int32 row, bool on)
+Allow(LocationClient& client, int32 row, bool on)
 {
 	char path[64];
 	snprintf(path, sizeof(path), "programs_%02d.allowed", (int)row);
@@ -68,7 +68,7 @@ Allow(BLocationClient& client, int32 row, bool on)
 int main()
 {
 	BApplication app("application/x-vnd.basho-settings-table-test");
-	BLocationClient client;
+	LocationClient client;
 
 	// two programs, so that the table has rows: this one asks (and is listed from then on), the other has a rule
 	BMessage ignored;

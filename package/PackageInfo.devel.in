@@ -2,7 +2,7 @@ name			basho_devel
 version			@VERSION@
 architecture	@ARCH@
 summary			"The location server of Haiku (Basho), development files"
-description		"The headers (location/Location.h: the protocol, location/LocationClient.h: BLocationClient) and the static
+description		"The headers (location/Location.h: the protocol, location/LocationClient.h: LocationClient) and the static
 library liblocation.a for programs that want to know where the computer is."
 packager		"Gregor B. Rosenauer <semantic.extensions@gmail.com>"
 vendor			"SEN Labs e.U."

@@ -2,8 +2,7 @@
  * SPDX-License-Identifier: MIT
  * SPDX-FileCopyrightText: 2026 SEN Labs e.U.
  */
-#ifndef _LOCATION_MESSAGE_H_
-#define _LOCATION_MESSAGE_H_
+#pragma once
 
 #include "Fix.h"
 
@@ -13,5 +12,3 @@ class BMessage;
 void	FixToMessage(const basho::Fix& fix, bool stale, const char* granularity, BMessage* message);
 /** The fields back to a fix: with a position if the message has one, else (country level) with the country only. False if the message has neither a usable position nor a country. */
 bool	MessageToFix(const BMessage* message, basho::Fix* fix);
-
-#endif

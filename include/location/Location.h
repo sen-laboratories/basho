@@ -2,14 +2,13 @@
  * SPDX-License-Identifier: MIT
  * SPDX-FileCopyrightText: 2026 SEN Labs e.U.
  */
-#ifndef _LOCATION_H_
-#define _LOCATION_H_
+#pragma once
 
 #include <SupportDefs.h>
 
 /**
  * The protocol of the location server (Basho): where this machine is, roughly, for every program that wants to know. The server is a background application, nothing in it depends on SEN.
- * Programs talk to it with BMessages, or with the BLocationClient of LocationClient.h that wraps them.
+ * Programs talk to it with BMessages, or with the LocationClient of LocationClient.h that wraps them.
  *
  * A fix (the payload of LOCATION_CHANGED and LOCATION_CURRENT_REPLY):
  *   latitude   B_DOUBLE_TYPE    decimal degrees, WGS 84 (missing at the level "country": then there is no position)
@@ -59,5 +58,3 @@ enum {
 	LOCATION_CURRENT_REPLY	= 'LCRP',	///< a fix, the answer to LOCATION_GET_CURRENT
 	LOCATION_ERROR			= 'LCER'	///< "error" (string, in words), "status" (int32, a status_t: B_NOT_ALLOWED the user said no, B_NO_INIT no fix yet, B_ERROR the lookup failed)
 };
-
-#endif	// _LOCATION_H_

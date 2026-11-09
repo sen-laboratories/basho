@@ -2,8 +2,7 @@
  * SPDX-License-Identifier: MIT
  * SPDX-FileCopyrightText: 2026 SEN Labs e.U.
  */
-#ifndef _BASHO_SETTINGS_MESSAGE_H_
-#define _BASHO_SETTINGS_MESSAGE_H_
+#pragma once
 
 #include "Settings.h"
 
@@ -52,5 +51,3 @@ std::string					ProgramPathKey(const std::string& signature);
 std::string					SignatureOfField(const std::string& nameOrPathKey);
 
 }	// namespace basho
-
-#endif

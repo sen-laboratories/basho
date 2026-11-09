@@ -2,8 +2,7 @@
  * SPDX-License-Identifier: MIT
  * SPDX-FileCopyrightText: 2026 SEN Labs e.U.
  */
-#ifndef _BASHO_HTTP_CLIENT_H_
-#define _BASHO_HTTP_CLIENT_H_
+#pragma once
 
 #include <string>
 
@@ -21,5 +20,3 @@ namespace basho {
 bool	HttpFetch(const std::string& url, std::string* body, std::string* error, int timeoutMs = 10000);
 
 }	// namespace basho
-
-#endif

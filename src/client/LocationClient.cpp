@@ -9,25 +9,25 @@
 #include <Message.h>
 #include <Roster.h>
 
-BLocationClient::BLocationClient()
+LocationClient::LocationClient()
 {
 }
 
 
-BLocationClient::~BLocationClient()
+LocationClient::~LocationClient()
 {
 }
 
 
 bool
-BLocationClient::IsRunning()
+LocationClient::IsRunning()
 {
 	return be_roster != NULL && be_roster->IsRunning(LOCATION_SERVER_SIGNATURE);
 }
 
 
 status_t
-BLocationClient::_Server(BMessenger* server)
+LocationClient::_Server(BMessenger* server)
 {
 	if (!fServer.IsValid()) {
 		if (be_roster == NULL)
@@ -53,7 +53,7 @@ BLocationClient::_Server(BMessenger* server)
 
 
 status_t
-BLocationClient::_Send(BMessage* message, BMessage* reply, bigtime_t timeout)
+LocationClient::_Send(BMessage* message, BMessage* reply, bigtime_t timeout)
 {
 	BMessenger server;
 	status_t result = _Server(&server);
@@ -68,7 +68,7 @@ BLocationClient::_Send(BMessage* message, BMessage* reply, bigtime_t timeout)
 
 
 status_t
-BLocationClient::StartWatching(const BMessenger& target, const char* granularity)
+LocationClient::StartWatching(const BMessenger& target, const char* granularity)
 {
 	BMessage message(LOCATION_SUBSCRIBE);
 	message.AddMessenger("target", target);
@@ -81,7 +81,7 @@ BLocationClient::StartWatching(const BMessenger& target, const char* granularity
 
 
 status_t
-BLocationClient::StopWatching(const BMessenger& target)
+LocationClient::StopWatching(const BMessenger& target)
 {
 	BMessage message(LOCATION_UNSUBSCRIBE);
 	message.AddMessenger("target", target);
@@ -92,7 +92,7 @@ BLocationClient::StopWatching(const BMessenger& target)
 
 
 status_t
-BLocationClient::GetCurrent(BMessage* fix, bigtime_t timeout, bool force, const char* granularity)
+LocationClient::GetCurrent(BMessage* fix, bigtime_t timeout, bool force, const char* granularity)
 {
 	BMessage request(LOCATION_GET_CURRENT);
 	request.AddBool("force", force);
@@ -112,7 +112,7 @@ BLocationClient::GetCurrent(BMessage* fix, bigtime_t timeout, bool force, const 
 
 
 status_t
-BLocationClient::GetCurrentLocation(double* latitude, double* longitude, BString* city, bigtime_t timeout, const char* granularity)
+LocationClient::GetCurrentLocation(double* latitude, double* longitude, BString* city, bigtime_t timeout, const char* granularity)
 {
 	BMessage fix;
 	status_t result = GetCurrent(&fix, timeout, false, granularity);
@@ -129,7 +129,7 @@ BLocationClient::GetCurrentLocation(double* latitude, double* longitude, BString
 
 
 status_t
-BLocationClient::SetManualLocation(double latitude, double longitude, const char* city, const char* country)
+LocationClient::SetManualLocation(double latitude, double longitude, const char* city, const char* country)
 {
 	BMessage message(LOCATION_SET_OVERRIDE);
 	message.AddDouble("latitude", latitude);
@@ -145,7 +145,7 @@ BLocationClient::SetManualLocation(double latitude, double longitude, const char
 
 
 status_t
-BLocationClient::ClearManualLocation()
+LocationClient::ClearManualLocation()
 {
 	BMessage message(LOCATION_CLEAR_OVERRIDE);
 	BMessage reply;
@@ -155,7 +155,7 @@ BLocationClient::ClearManualLocation()
 
 
 status_t
-BLocationClient::Refresh()
+LocationClient::Refresh()
 {
 	BMessage message(LOCATION_FORCE_REFRESH);
 	BMessage reply;
@@ -165,7 +165,7 @@ BLocationClient::Refresh()
 
 
 status_t
-BLocationClient::GetStatus(BMessage* status, bigtime_t timeout)
+LocationClient::GetStatus(BMessage* status, bigtime_t timeout)
 {
 	BMessage message(LOCATION_GET_STATUS);
 	return _Send(&message, status, timeout);
@@ -173,7 +173,7 @@ BLocationClient::GetStatus(BMessage* status, bigtime_t timeout)
 
 
 status_t
-BLocationClient::GetSettings(BMessage* settings, BMessage* schema, BMessage* defaults)
+LocationClient::GetSettings(BMessage* settings, BMessage* schema, BMessage* defaults)
 {
 	BMessage request(LOCATION_SETTINGS);
 	BMessage reply;
@@ -194,7 +194,7 @@ BLocationClient::GetSettings(BMessage* settings, BMessage* schema, BMessage* def
 
 
 status_t
-BLocationClient::ApplySettings(const BMessage& changes, BString* detail)
+LocationClient::ApplySettings(const BMessage& changes, BString* detail)
 {
 	BMessage request(LOCATION_SETTINGS_SET);
 	request.AddMessage("settings", &changes);
@@ -209,7 +209,7 @@ BLocationClient::ApplySettings(const BMessage& changes, BString* detail)
 
 
 status_t
-BLocationClient::SetProgramLimit(const char* signature, const char* level, BString* detail)
+LocationClient::SetProgramLimit(const char* signature, const char* level, BString* detail)
 {
 	// (the name of a program's field: the dots of the signature are written as %2E, as the settings message does it; a backslash and a percent sign, too)
 	BString key("program:");

@@ -2,8 +2,7 @@
  * SPDX-License-Identifier: MIT
  * SPDX-FileCopyrightText: 2026 SEN Labs e.U.
  */
-#ifndef _LOCATION_SERVER_H_
-#define _LOCATION_SERVER_H_
+#pragma once
 
 #include "Fix.h"
 #include "Granularity.h"
@@ -112,5 +111,3 @@ private:
 	BMessageRunner*			fTimer;
 	BMessageRunner*			fScheduled;
 };
-
-#endif	// _LOCATION_SERVER_H_
