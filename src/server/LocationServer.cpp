@@ -21,6 +21,7 @@
 #include <Roster.h>
 
 #include <algorithm>
+#include <cstdio>
 #include <ctime>
 #include <fstream>
 #include <sstream>
@@ -504,8 +505,13 @@ LocationServer::_AnswerWaiters()
 {
 	std::vector<BMessage> waiters;
 	waiters.swap(fWaiters);
-	for (BMessage& waiter : waiters)
-		_ReplyFix(&waiter);
+	for (BMessage& waiter : waiters) {
+		// (a program that asked for the location, or the settings window that was asked to show it)
+		if (waiter.what == LOCATION_SETTINGS_SET)
+			_ReplySettings(&waiter, B_OK, std::vector<std::string>());
+		else
+			_ReplyFix(&waiter);
+	}
 }
 
 
@@ -695,7 +701,7 @@ LocationServer::_SettingsRequest(BMessage* message)
 {
 	BMessage values, schema, defaults;
 	fSettingsRows.clear();
-	basho::DescribeSettings(fSettings, fSeen, &values, &schema, &defaults, &fSettingsRows);
+	basho::DescribeSettings(fSettings, fSeen, &values, &schema, &defaults, &fSettingsRows, _PlaceText());
 
 	BMessage reply(LOCATION_SETTINGS_REPLY);
 	reply.AddInt32("result", B_OK);
@@ -730,9 +736,27 @@ LocationServer::_SettingsSet(BMessage* message)
 		result = basho::ApplySettingsChanges(&fSettings, changes, &refused, fSettingsRows);
 	_SettingsChanged(before);
 
+	// the button "Show location now": the place is looked up (if that is allowed and not done a moment ago) and the answer, with what was found, comes when that is done
+	if (result == B_OK && changes.GetBool("show_location", false) && !fOverrideActive) {
+		const status_t started = _StartLookup("settings");
+		const bool consentPending = started == B_NOT_ALLOWED && fSettings.networkLookup == Settings::kAsk && fAskPending;
+		if (started == B_OK || fLookingUp || consentPending) {
+			fWaiters.push_back(*message);
+			return;
+		}
+	}
+	_ReplySettings(message, result, refused);
+}
+
+
+// The answer to a change of the settings (or to the button): the settings as they are now, with the place that the server knows. It is sent whether or not the sender waits for it:
+// the settings window does not, and shows what comes.
+void
+LocationServer::_ReplySettings(BMessage* to, status_t result, const std::vector<std::string>& refused)
+{
 	BMessage values;
 	fSettingsRows.clear();
-	basho::DescribeSettings(fSettings, fSeen, &values, NULL, NULL, &fSettingsRows);
+	basho::DescribeSettings(fSettings, fSeen, &values, NULL, NULL, &fSettingsRows, _PlaceText());
 	BMessage reply(B_REPLY);
 	reply.AddInt32("result", result);
 	if (!refused.empty()) {
@@ -742,8 +766,50 @@ LocationServer::_SettingsSet(BMessage* message)
 		reply.AddString("detail", detail.c_str());
 	}
 	reply.AddMessage("settings", &values);
-	if (message->IsSourceWaiting())
-		message->SendReply(&reply);
+	to->SendReply(&reply);
+}
+
+
+// What the settings window shows as the place that was found: the place with its position (the finest the server has: this is the user's own window, not a program that asked), how it was
+// found and when; or why there is none.
+std::string
+LocationServer::_PlaceText() const
+{
+	Fix fix;
+	if (!_EffectiveFix(&fix)) {
+		if (fSettings.networkLookup == Settings::kNever)
+			return "No place: the lookup is switched off.";
+		if (fLookingUp)
+			return "Looking it up...";
+		if (!fLastError.empty()) {
+			std::string firstLine = fLastError.substr(0, fLastError.find('\n'));
+			return "No place yet: " + firstLine;
+		}
+		return "Not looked up yet.";
+	}
+	std::string text;
+	for (const std::string* part : {&fix.city, &fix.region, &fix.country}) {
+		if (part->empty() || (!text.empty() && text.size() >= part->size() && text.compare(text.size() - part->size(), part->size(), *part) == 0))
+			continue;
+		text += text.empty() ? *part : ", " + *part;
+	}
+	if (text.empty())
+		text = "Somewhere";
+	if (fix.hasPosition) {
+		char position[64];
+		snprintf(position, sizeof(position), " (%.2f, %.2f)", fix.latitude, fix.longitude);
+		text += position;
+	}
+	text += fix.manual ? std::string(", set by hand") : ", by " + fix.provider;
+	if (fix.timestamp > 0) {
+		const time_t when = (time_t)fix.timestamp;
+		char clock[32];
+		struct tm local;
+		localtime_r(&when, &local);
+		strftime(clock, sizeof(clock), " at %H:%M", &local);
+		text += clock;
+	}
+	return text;
 }
 
 

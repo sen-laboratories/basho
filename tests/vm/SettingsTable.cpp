@@ -148,6 +148,54 @@ int main()
 	CHECK(Find(client, kProgram, &row) >= 0 && !row.GetBool("allowed", true));
 	CHECK(Find(client, kOther, NULL) < 0);										// (left out: no limit any more, and it never asked: no row)
 
+	// the lookup services: a table with a box for each, in a fixed order; one stays on; the button and the text of the place are in the description
+	{
+		BMessage now, schema2, ignoredDefaults;
+		CHECK(client.GetSettings(&now, &schema2, &ignoredDefaults) == B_OK);
+		BMessage services, use, serviceName, button, where;
+		CHECK(schema2.FindMessage("services", &services) == B_OK && strcmp(services.GetString("kind", ""), "table") == 0);
+		CHECK(schema2.FindMessage("services.enabled", &use) == B_OK);
+		CHECK(schema2.FindMessage("services.name", &serviceName) == B_OK && serviceName.GetBool("readonly", false));
+		CHECK(schema2.FindMessage("show_location", &button) == B_OK && strcmp(button.GetString("kind", ""), "button") == 0);
+		CHECK(schema2.FindMessage("where", &where) == B_OK && where.GetBool("readonly", false));
+		CHECK(now.HasString("where") && !now.GetBool("show_location", true));
+		int32 rows = 0, on = 0;
+		BMessage each;
+		for (; now.FindMessage("services", rows, &each) == B_OK; rows++) {
+			CHECK(each.HasString("name") && each.HasString("id"));
+			on += each.GetBool("enabled", false) ? 1 : 0;
+		}
+		CHECK(rows >= 3 && on >= 1);
+
+		// switching off every one is refused (the last that is on stays); switching one off and on again works
+		BMessage first;
+		now.FindMessage("services", 0, &first);
+		const bool wasOn = first.GetBool("enabled", false);
+		BMessage flip;
+		flip.AddBool("services_00.enabled", !wasOn);
+		const status_t flipped = client.ApplySettings(flip);
+		client.GetSettings(&now);
+		now.FindMessage("services", 0, &first);
+		CHECK(flipped == B_OK && first.GetBool("enabled", false) == !wasOn);
+		BMessage back;
+		back.AddBool("services_00.enabled", wasOn);
+		CHECK(client.ApplySettings(back) == B_OK);
+
+		BMessage allOff;
+		for (int32 i = 0; i < rows; i++) {
+			char key[64];
+			snprintf(key, sizeof(key), "services_%02d.enabled", (int)i);
+			allOff.AddBool(key, false);
+		}
+		CHECK(client.ApplySettings(allOff) == B_BAD_VALUE);
+		client.GetSettings(&now);
+		on = 0;
+		for (int32 i = 0; now.FindMessage("services", i, &each) == B_OK; i++)
+			on += each.GetBool("enabled", false) ? 1 : 0;
+		CHECK(on >= 1);
+		CHECK(Set(client, "services_99.enabled", "x") == B_BAD_VALUE);
+	}
+
 	// clean up
 	client.SetProgramLimit(kProgram, "default");
 

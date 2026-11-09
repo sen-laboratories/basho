@@ -20,7 +20,8 @@ class BMessage;
  * that have a limit or have asked, shown as a table (`kind = table` in the schema): a row for each program with its `name`, its `program` (the signature, hidden), `allowed` (whether it may
  * know where the computer is at all) and `level` (what it may know, `default` if it has no limit of its own). The path key of a cell is `programs_03.level`: the row is the number it had in the last
  * description. A single field `program:<signature>` (the dots of the signature written as %2E) is accepted as a change, too: it is what the client class and the tool send. Basho does not
- * need SEN for this: the format is a message, and anyone can read it.
+ * need SEN for this: the format is a message, and anyone can read it. Also in it: the button `show_location` (`kind = button`: a change with the field `true` asks the server to look the place up now and
+ * show it), the text `where` (`readonly`: what the server knows, given as `place`), and the array `services` for the lookup services (a row for each: `name`, `id`, `enabled`; the cell key is `services_01.enabled`).
  */
 namespace basho {
 
@@ -37,7 +38,8 @@ extern const char* const kProgramDefault;
 
 /** Fills the three messages. `seen` are the programs that have asked (they are listed with the rules, so that a limit can be set for a program that has not got one yet). `rows` gets the signatures
  *  of the programs in the order of the rows of the table: the change of a cell names its row by the number in this list. */
-void	DescribeSettings(const Settings& settings, const std::vector<SeenProgram>& seen, BMessage* values, BMessage* schema, BMessage* defaults, std::vector<std::string>* rows = NULL);
+void	DescribeSettings(const Settings& settings, const std::vector<SeenProgram>& seen, BMessage* values, BMessage* schema, BMessage* defaults, std::vector<std::string>* rows = NULL,
+	const std::string& place = std::string());
 
 /**
  * Applies changes: a flat message of fields under their path keys (`max_precision`, `programs_03.level`, `program:<signature>`), or the whole settings message (after Revert and Defaults). Valid changes are applied to `settings`, the names of those that are not go to `refused`. Returns B_OK if all were valid, else B_BAD_VALUE.

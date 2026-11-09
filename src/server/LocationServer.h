@@ -50,6 +50,8 @@ private:
 	void					_GetStatus(BMessage* message);
 	void					_SettingsRequest(BMessage* message);
 	void					_SettingsSet(BMessage* message);
+	void					_ReplySettings(BMessage* to, status_t result, const std::vector<std::string>& refused);
+	std::string				_PlaceText() const;
 	void					_SettingsChanged(const basho::Settings& before);
 
 	// the lookup
@@ -97,7 +99,7 @@ private:
 	std::vector<Subscriber>	fSubscribers;
 	std::vector<basho::SeenProgram>	fSeen;		///< the programs that have asked, for the list in the settings
 	std::vector<std::string>		fSettingsRows;	///< the programs of the table in the settings as they were last described: a change of a cell names its row by the number in this list
-	std::vector<BMessage>	fWaiters;		///< GET_CURRENT with force: answered when the lookup is done
+	std::vector<BMessage>	fWaiters;		///< GET_CURRENT with force, and the settings window's "Show location now" (LOCATION_SETTINGS_SET): answered when the lookup is done
 
 	bool					fSessionAllow;	///< --allow-network: agreed for this run only
 	bool					fAsked;			///< the window was shown (and answered "Not now") in this run
