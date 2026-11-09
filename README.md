@@ -2,10 +2,14 @@
 SPDX-License-Identifier: MIT
 SPDX-FileCopyrightText: 2026 SEN Labs e.U.
 -->
+<p align="center">
+  <img src="images/basho-logo.jpg" alt="Basho logo" width="360"/>
+</p>
+
 # Basho (場所), the location server
 
 A small background application for Haiku that knows roughly **where the machine is** and tells the programs that ask. It is a system service in the manner of `notification_server`:
-nothing in it depends on SEN, it keeps no BFS attributes, and programs talk to it with `BMessage`s (or the `BLocationClient` class). SEN uses it for contexts that follow the city you
+nothing in it depends on SEN, it keeps no BFS attributes, and programs talk to it with `BMessage`s (or the `LocationClient` class). SEN uses it for contexts that follow the city you
 are in, and for place lookups that prefer what is near you.
 
 *Basho* is the Japanese word for *place*, and the name of the poet who wandered the country and made the haiku what it is. The signature is `application/x-vnd.basho-location_server`.
@@ -25,7 +29,7 @@ are in, and for place lookups that prefer what is near you.
   by the signature of the application that sends the request, and keeps a list of the programs that have asked, so that the settings show them and a limit can be set for one before it
   gets its first answer. A change counts at once, also for programs that are subscribed already (they are told what they may be told now). This protects against programs that behave
   and against accidents; Haiku has no users and no sandbox to tell a program that lies about its signature from the real one.
-* **Tells subscribers.** A program subscribes with `LOCATION_SUBSCRIBE` (or `BLocationClient::StartWatching()`), gets the fix that the server has at once, and `LOCATION_CHANGED` when the
+* **Tells subscribers.** A program subscribes with `LOCATION_SUBSCRIBE` (or `LocationClient::StartWatching()`), gets the fix that the server has at once, and `LOCATION_CHANGED` when the
   place changes. A change is announced only when two lookups in a row agree on a new place (see `src/core/Tracker.h`): IP lookups jitter, and a program that switches something on every
   jitter is worse than none. And a subscriber is told only when *what it may be told* changes: a program that asked for the country does not hear of a move inside the country.
 * **Looks again** every 30 minutes, when the network changes (a cable, a Wi-Fi that is joined), and when a program asks, but never more often than once a minute.
@@ -38,7 +42,7 @@ The protocol and the fields are in [include/location/Location.h](include/locatio
 ## Use
 
 ```cpp
-BLocationClient client;                          // needs a BApplication; starts the server if it is not running
+LocationClient client;                          // needs a BApplication; starts the server if it is not running
 client.StartWatching(BMessenger(this), "city");  // LOCATION_CHANGED arrives in MessageReceived(): latitude, longitude, accuracy, city, region, country, timezone, provider, stale, granularity
                                                  // (ask for as little as you need: "city", "region", "country" or a number of km; the user's limit wins)
 
@@ -87,7 +91,7 @@ The version is that of `src/server/location_server.rdef` (and nowhere else). CI 
 flowchart TD
     subgraph Clients["Clients & Applications"]
         CLI["location (CLI tool)"]
-        Lib["BLocationClient (C++ wrapper)"]
+        Lib["LocationClient (C++ wrapper)"]
         SEN["sen_server / Third-party apps"]
     end
 
@@ -123,7 +127,7 @@ flowchart TD
 |---|---|
 | `src/core` | **portable C++** (no Haiku headers): the fix, the providers and their parsers, the fallback, the change tracker, the settings. Unit-tested on the Mac. |
 | `src/server` | the server (`BApplication`), the messages, and `HttpClient.cpp`: the HTTP of Haiku (`BHttpSession`/`BHttpRequest`, the way the HTTP classes of SEN do it), with SEN's socket client as the fallback if its header is installed |
-| `src/client` | `BLocationClient` |
+| `src/client` | `LocationClient` |
 | `src/tools` | the command `location` |
 
 Another system (Hokku) needs its own `HttpClient.cpp` and the transport of the messages; the core is the same.
