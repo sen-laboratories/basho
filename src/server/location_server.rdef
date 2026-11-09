@@ -21,7 +21,7 @@ resource app_version {
 };
 
 /* The icon of the program, which is also the icon of the Location node in the settings of SEN: the hand with the globe. Made from images/basho-server.svg by
-   svg2hvif.py of SEN (sento/scripts, github.com/sen-laboratories/sento): python3 svg2hvif.py images/basho-server.svg --rdef. */
+   svg2hvif.py of SEN (sento/tools, github.com/sen-laboratories/sento): python3 svg2hvif.py images/basho-server.svg --rdef. */
 resource vector_icon array {
 	$"6E6369660A010000004C01FFCB9AFF01CD9866B201CD9966B201FFFFFFF20100"
 	$"0000FF01FFFFFFB2020106033CBB3B000000000000BCBB3B49A401482B653133"

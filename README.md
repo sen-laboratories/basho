@@ -140,7 +140,7 @@ Another system (Hokku) needs its own `HttpClient.cpp` and the transport of the m
 ## Credits
 
 The icon of the server (`images/basho-server.svg`) combines the **Hand** and the **Globe** icons of Haiku, Inc. (MIT license): the world, served. It is made into the vector icon of the program by
-`svg2hvif.py` of [SEN](https://github.com/sen-laboratories/sento/tree/1.0-sophia/scripts).
+`svg2hvif.py` of [SEN](https://github.com/sen-laboratories/sento/tree/1.0-sophia/tools).
 
 ## Status
 
