@@ -71,6 +71,22 @@ Settings::ProviderIds() const
 	return providers.empty() ? DefaultProviderIds() : providers;
 }
 
+std::vector<std::string>
+Settings::ProviderOrder() const
+{
+	// (what the setting names, in its order, and then every provider that it does not name, in the order of the table of the providers)
+	std::vector<std::string> order;
+	for (const std::string& id : providerOrder) {
+		if (FindProvider(id) != NULL && std::find(order.begin(), order.end(), id) == order.end())
+			order.push_back(id);
+	}
+	for (const Provider& provider : AllProviders()) {
+		if (std::find(order.begin(), order.end(), provider.id) == order.end())
+			order.push_back(provider.id);
+	}
+	return order;
+}
+
 LocationTracker::Config
 Settings::TrackerConfig() const
 {
@@ -119,9 +135,14 @@ Settings::Parse(const std::string& text)
 		std::istringstream in(v["providers"]);
 		std::string id;
 		while (in >> id) {
-			// (unknown names are kept out: a typo must not leave the list empty and ask nobody)
-			if (FindProvider(id) != NULL)
-				settings.providers.push_back(id);
+			// (`-name` is a service that is off and has its place in the list; unknown names are kept out: a typo must not leave the list empty and ask nobody)
+			const bool off = !id.empty() && id[0] == '-';
+			const std::string name = off ? id.substr(1) : id;
+			if (FindProvider(name) == NULL)
+				continue;
+			settings.providerOrder.push_back(name);
+			if (!off)
+				settings.providers.push_back(name);
 		}
 	}
 	if (v.count("interval_minutes"))
@@ -164,13 +185,16 @@ Settings::ToText() const
 		<< "# May the public address of this machine be sent to a lookup service to find out roughly where it is?  ask | allow | never\n"
 		<< "network_lookup " << NetworkLookupName(networkLookup) << "\n"
 		<< "\n"
-		<< "# The services that are asked, in this order. Available:";
+		<< "# The services, in the order that they are asked; one with a - in front is off (it keeps its place in the list). Available:";
 	for (const Provider& provider : AllProviders())
 		out << " " << provider.id << (provider.secure ? "" : " (http only: the answer can be read on the way, so it is not asked unless named here)");
 	out << "\n";
 	out << "providers";
-	for (const std::string& id : ProviderIds())
-		out << " " << id;
+	{
+		const std::vector<std::string> on = ProviderIds();
+		for (const std::string& id : ProviderOrder())
+			out << " " << (std::find(on.begin(), on.end(), id) != on.end() ? "" : "-") << id;
+	}
 	out << "\n"
 		<< "\n"
 		<< "# Minutes between two lookups (5 to 1440). A change of the network triggers one, too.\n"

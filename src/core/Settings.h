@@ -29,7 +29,8 @@ struct Settings {
 	enum NetworkLookup { kAsk, kAllow, kNever };
 
 	NetworkLookup				networkLookup = kAsk;
-	std::vector<std::string>	providers;			///< empty: the default (see DefaultProviderIds())
+	std::vector<std::string>	providers;			///< the services that are asked, in order; empty: the default (see DefaultProviderIds())
+	std::vector<std::string>	providerOrder;		///< every service in the order that the settings show them, also those that are off (`-id` in the file); empty: the order of AllProviders()
 	int							intervalMinutes = 30;
 	double						minMoveKm = 25;
 	int							confirmations = 2;
@@ -52,6 +53,8 @@ struct Settings {
 
 	/** The providers to ask: the setting, else the default. */
 	std::vector<std::string>	ProviderIds() const;
+	/** All the providers in the order of the list in the settings (the ones that are on and the ones that are off); every known provider is in it once. */
+	std::vector<std::string>	ProviderOrder() const;
 	LocationTracker::Config		TrackerConfig() const;
 
 	static Settings				Parse(const std::string& text);

@@ -247,6 +247,17 @@ TestSettings()
 	CHECK(Settings::Parse("network_lookup whatever").networkLookup == Settings::kAsk);
 	// only unknown names: the default list (an empty list would ask nobody)
 	CHECK(Settings::Parse("providers bogus").ProviderIds() == DefaultProviderIds());
+	{
+		// a service that is off keeps its place in the list (`-name`), and the list has every provider, in this order
+		Settings order = Settings::Parse("providers geojs -ipwho.is ipinfo\n");
+		CHECK((order.providers == std::vector<std::string>{"geojs", "ipinfo"}));
+		const std::vector<std::string> all = order.ProviderOrder();
+		CHECK(all.size() == AllProviders().size() && all[0] == "geojs" && all[1] == "ipwho.is" && all[2] == "ipinfo");
+		CHECK(Settings::Parse(order.ToText()).ProviderOrder() == all);
+		CHECK(Settings::Parse(order.ToText()).providers == order.providers);
+		CHECK(order.ToText().find("providers geojs -ipwho.is ipinfo") != std::string::npos);
+		CHECK(Settings().ProviderOrder().size() == AllProviders().size());
+	}
 
 	// max_precision: the default is the finest; a value that is not understood is the coarsest
 	CHECK(Settings::Parse("").maxPrecision.IsCity());

@@ -190,11 +190,14 @@ FillValues(const Settings& settings, const std::vector<SeenProgram>& seen, BMess
 	values->AddString(kWhere, place.c_str());
 	values->AddString("max_precision", GranularityName(settings.maxPrecision).c_str());
 	const std::vector<std::string> enabled = settings.ProviderIds();
-	for (const Provider& provider : AllProviders()) {
+	for (const std::string& id : settings.ProviderOrder()) {
+		const Provider* provider = FindProvider(id);
+		if (provider == NULL)
+			continue;
 		BMessage row;
-		row.AddString("name", ServiceName(provider).c_str());
-		row.AddString("id", provider.id);
-		row.AddBool("enabled", std::find(enabled.begin(), enabled.end(), provider.id) != enabled.end());
+		row.AddString("name", ServiceName(*provider).c_str());
+		row.AddString("id", provider->id);
+		row.AddBool("enabled", std::find(enabled.begin(), enabled.end(), id) != enabled.end());
 		values->AddMessage(kServices, &row);
 	}
 	values->AddInt32("interval_minutes", settings.intervalMinutes);
@@ -292,8 +295,9 @@ DescribeSettings(const Settings& settings, const std::vector<SeenProgram>& seen,
 		// the services that are asked: a box for each, in the order of the list; the first that answers wins
 		BMessage services;
 		services.AddString(kLabel, "Lookup services");
-		services.AddString(kHelp, "The services that are asked, in this order, until one answers. At least one stays on. A service that answers over http only can be read on the way: it is off unless you switch it on.");
+		services.AddString(kHelp, "The services that are asked, in this order, until one answers: drag a row to change the order. At least one stays on. A service that answers over http only can be read on the way: it is off unless you switch it on.");
 		services.AddString(kKind, "table");
+		services.AddBool("reorderable", true);
 		services.AddInt32(kOrder, 5);
 		schema->AddMessage(kServices, &services);
 
@@ -450,6 +454,8 @@ ApplySettingsChanges(Settings* settings, const BMessage& changes, std::vector<st
 	std::set<std::string> services;
 	for (const std::string& id : settings->ProviderIds())
 		services.insert(id);
+	const std::vector<std::string> serviceOrderBefore = settings->ProviderOrder();		// (a cell is named by its row in the last description)
+	std::vector<std::string> serviceOrder = serviceOrderBefore;
 	bool servicesChanged = false;
 	char* rawName;
 	type_code type;
@@ -511,14 +517,19 @@ ApplySettingsChanges(Settings* settings, const BMessage& changes, std::vector<st
 			// the whole table (Revert, Defaults): the services that are on
 			services.clear();
 			servicesChanged = true;
+			serviceOrder.clear();
 			for (int32 v = 0; v < count; v++) {
 				BMessage row;
 				if (changes.FindMessage(rawName, v, &row) != B_OK)
 					continue;
 				const std::string id = row.GetString("id", "");
-				if (FindProvider(id) == NULL)
+				if (FindProvider(id) == NULL) {
 					refuse(name);
-				else if (row.GetBool("enabled", false))
+					continue;
+				}
+				if (std::find(serviceOrder.begin(), serviceOrder.end(), id) == serviceOrder.end())
+					serviceOrder.push_back(id);		// (the order of the rows is the order of the list)
+				if (row.GetBool("enabled", false))
 					services.insert(id);
 			}
 		} else if (name.compare(0, strlen(kServices), kServices) == 0) {
@@ -526,12 +537,12 @@ ApplySettingsChanges(Settings* settings, const BMessage& changes, std::vector<st
 			int32 row = 0;
 			std::string column;
 			bool on = true;
-			if (!ParseCellKey(name, kServices, &row, &column) || column != "enabled" || row < 0 || row >= (int32)AllProviders().size()
+			if (!ParseCellKey(name, kServices, &row, &column) || column != "enabled" || row < 0 || row >= (int32)serviceOrderBefore.size()
 					|| changes.FindBool(rawName, &on) != B_OK) {
 				refuse(name);
 				continue;
 			}
-			const std::string id = AllProviders()[row].id;
+			const std::string id = serviceOrderBefore[row];
 			if (on)
 				services.insert(id);
 			else
@@ -580,15 +591,22 @@ ApplySettingsChanges(Settings* settings, const BMessage& changes, std::vector<st
 		// (a field that is none of these is not a setting of this server: left alone)
 	}
 	if (servicesChanged) {
-		std::vector<std::string> ordered;
-		for (const Provider& provider : AllProviders()) {
-			if (services.count(provider.id) != 0)
-				ordered.push_back(provider.id);
+		// (the rows that a whole table did not name keep their places after the others)
+		for (const std::string& id : serviceOrderBefore) {
+			if (std::find(serviceOrder.begin(), serviceOrder.end(), id) == serviceOrder.end())
+				serviceOrder.push_back(id);
 		}
-		if (ordered.empty())
+		std::vector<std::string> ordered;
+		for (const std::string& id : serviceOrder) {
+			if (services.count(id) != 0)
+				ordered.push_back(id);
+		}
+		if (ordered.empty()) {
 			refuse("services (one has to stay on)");
-		else
+		} else {
+			settings->providerOrder = serviceOrder;
 			settings->providers = ordered;
+		}
 	}
 	// the whole message (Revert, Defaults): a program that it does not name has no limit of its own any more
 	if (changes.HasString("network_lookup") && changes.HasString("max_precision")) {

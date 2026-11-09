@@ -15,6 +15,7 @@
 #include <string.h>
 
 #include <string>
+#include <vector>
 
 static int sFailures = 0;
 #define CHECK(condition) \
@@ -194,6 +195,46 @@ int main()
 			on += each.GetBool("enabled", false) ? 1 : 0;
 		CHECK(on >= 1);
 		CHECK(Set(client, "services_99.enabled", "x") == B_BAD_VALUE);
+
+		// a service is moved (the form sends the whole message with the rows in the new order): the order is kept, and a toggle by the row of the new order hits the right service
+		client.GetSettings(&now);
+		std::vector<BMessage> order;
+		for (int32 i = 0; now.FindMessage("services", i, &each) == B_OK; i++)
+			order.push_back(each);
+		BMessage reordered(now);
+		reordered.RemoveName("services");
+		for (size_t i = 1; i < order.size(); i++)
+			reordered.AddMessage("services", &order[i]);
+		reordered.AddMessage("services", &order[0]);							// (the first goes to the end)
+		CHECK(client.ApplySettings(reordered) == B_OK);
+		client.GetSettings(&now);
+		CHECK(now.FindMessage("services", (int32)order.size() - 1, &each) == B_OK && strcmp(each.GetString("id", ""), order[0].GetString("id", "")) == 0);
+		CHECK(now.FindMessage("services", 0, &each) == B_OK && strcmp(each.GetString("id", ""), order[1].GetString("id", "")) == 0);
+		// (row 0 is now the second service: a cell of it changes that one)
+		const bool secondWasOn = each.GetBool("enabled", false);
+		BMessage second;
+		second.AddBool("services_00.enabled", !secondWasOn);
+		CHECK(client.ApplySettings(second) == B_OK);
+		client.GetSettings(&now);
+		CHECK(now.FindMessage("services", 0, &each) == B_OK && each.GetBool("enabled", false) == !secondWasOn);
+		BMessage secondBack;
+		secondBack.AddBool("services_00.enabled", secondWasOn);
+		client.ApplySettings(secondBack);
+		// (and back to the order it was: the first row to the end again, three times for four services)
+		for (size_t i = 1; i < order.size(); i++) {
+			client.GetSettings(&now);
+			std::vector<BMessage> current;
+			for (int32 k = 0; now.FindMessage("services", k, &each) == B_OK; k++)
+				current.push_back(each);
+			BMessage rotated(now);
+			rotated.RemoveName("services");
+			for (size_t k = 1; k < current.size(); k++)
+				rotated.AddMessage("services", &current[k]);
+			rotated.AddMessage("services", &current[0]);
+			client.ApplySettings(rotated);
+		}
+		client.GetSettings(&now);
+		CHECK(now.FindMessage("services", 0, &each) == B_OK && strcmp(each.GetString("id", ""), order[0].GetString("id", "")) == 0);
 	}
 
 	// clean up
