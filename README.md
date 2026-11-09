@@ -72,7 +72,7 @@ Powered by Shoji forms, this pane provides:
 * **Show Location now:** a button under the toggle that looks the place up (if the lookup is allowed) and shows what the server found, with how and when, in the line below it: the same fix that a program that may know everything would get, so you can see what is told.
 * A global precision limit (`city`, `region`, `country`, or custom radius).
 * **Lookup services:** a table with a box for each service (ipwho.is, GeoJS, ipinfo, and ip-api, which answers over http only and is off unless you switch it on). They are asked in the order of the list; at least one stays on.
-* **Application Permissions Table:** A live table listing every program that has requested location access. Each entry lets you toggle permission on/off or configure an individual precision cap.
+* **Application access** (a node below *Location*): the **Application Permissions Table:** A live table listing every program that has requested location access. Each entry lets you toggle permission on/off or configure an individual precision cap.
 
 *(Basho implements SEN's replicant settings protocol; any compatible host can embed this configuration UI.)*
 

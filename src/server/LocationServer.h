@@ -35,6 +35,7 @@ public:
 private:
 	enum {
 		kLookupDone		= 'LKdn',
+		kLookupProgress	= 'LKpr',		///< the lookup thread tells which service it asks now: `provider`
 		kTimer			= 'LKtm',
 		kScheduled		= 'LKsc',
 		kConsentAnswer	= 'LKca'
@@ -51,6 +52,10 @@ private:
 	void					_SettingsRequest(BMessage* message);
 	void					_SettingsSet(BMessage* message);
 	void					_ReplySettings(BMessage* to, status_t result, const std::vector<std::string>& refused);
+	/** the answer to a request for the settings, for a page: values, schema and defaults */
+	void					_MakeSettingsReply(const std::string& page, int32 serial, BMessage* reply);
+	/** tells the settings windows that show the settings what changed (a lookup that goes on, a program that asked): they get the page that they showed */
+	void					_PushSettings();
 	std::string				_PlaceText() const;
 	void					_SettingsChanged(const basho::Settings& before);
 
@@ -99,6 +104,14 @@ private:
 	std::vector<Subscriber>	fSubscribers;
 	std::vector<basho::SeenProgram>	fSeen;		///< the programs that have asked, for the list in the settings
 	std::vector<std::string>		fSettingsRows;	///< the programs of the table in the settings as they were last described: a change of a cell names its row by the number in this list
+	/** a settings window that asked for the settings and shows them: it is told when they change on their own */
+	struct SettingsWatcher {
+		BMessenger	target;
+		int32		serial;
+		std::string	page;
+	};
+	std::vector<SettingsWatcher>	fWatchers;
+	std::string				fActiveProvider;	///< the lookup service that is asked now ("" if none): a spinner in the settings
 	std::vector<BMessage>	fWaiters;		///< GET_CURRENT with force, and the settings window's "Show location now" (LOCATION_SETTINGS_SET): answered when the lookup is done
 
 	bool					fSessionAllow;	///< --allow-network: agreed for this run only

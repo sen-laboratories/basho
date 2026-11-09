@@ -174,39 +174,54 @@ AddProgramRow(BMessage* values, const Settings& settings, const std::string& sig
 }
 
 
-// The name of a service as the table shows it: a service that answers over http only says so (the answer can be read on the way)
+// The name of a service as the table shows it (the table has a column for the information about it)
 static std::string
 ServiceName(const Provider& provider)
 {
-	return provider.secure ? std::string(provider.name) : std::string(provider.name) + " (http only)";
+	return provider.name;
+}
+
+
+// The parts of the settings: the first (`general`) has everything but the programs, the page `access` has the table of the programs
+static bool
+IsAccessPage(const std::string& page)
+{
+	return page == "access";
 }
 
 
 static void
-FillValues(const Settings& settings, const std::vector<SeenProgram>& seen, BMessage* values, std::vector<std::string>* rows, const std::string& place)
+FillValues(const Settings& settings, const std::vector<SeenProgram>& seen, BMessage* values, std::vector<std::string>* rows, const std::string& place, const std::string& page,
+	const std::string& activeProvider)
 {
-	values->AddString("network_lookup", NetworkLookupName(settings.networkLookup));
-	values->AddBool(kShowLocation, false);		// (a button: never stored)
-	values->AddString(kWhere, place.c_str());
-	values->AddString("max_precision", GranularityName(settings.maxPrecision).c_str());
-	const std::vector<std::string> enabled = settings.ProviderIds();
-	for (const std::string& id : settings.ProviderOrder()) {
-		const Provider* provider = FindProvider(id);
-		if (provider == NULL)
-			continue;
-		BMessage row;
-		row.AddString("name", ServiceName(*provider).c_str());
-		row.AddString("id", provider->id);
-		row.AddBool("enabled", std::find(enabled.begin(), enabled.end(), id) != enabled.end());
-		values->AddMessage(kServices, &row);
+	if (!IsAccessPage(page)) {
+		values->AddString("network_lookup", NetworkLookupName(settings.networkLookup));
+		values->AddBool(kShowLocation, false);		// (a button: never stored)
+		values->AddString(kWhere, place.c_str());
+		values->AddString("max_precision", GranularityName(settings.maxPrecision).c_str());
+		const std::vector<std::string> enabled = settings.ProviderIds();
+		for (const std::string& id : settings.ProviderOrder()) {
+			const Provider* provider = FindProvider(id);
+			if (provider == NULL)
+				continue;
+			BMessage row;
+			row.AddString("name", ServiceName(*provider).c_str());
+			row.AddString("id", provider->id);
+			row.AddString("info", provider->info);
+			row.AddBool("busy", id == activeProvider);		// (the service that is asked now: a spinner before its name)
+			row.AddBool("enabled", std::find(enabled.begin(), enabled.end(), id) != enabled.end());
+			values->AddMessage(kServices, &row);
+		}
+		values->AddInt32("interval_minutes", settings.intervalMinutes);
+		values->AddInt32("min_move_km", (int32)std::lround(settings.minMoveKm));
+		values->AddInt32("confirmations", settings.confirmations);
+		values->AddInt32("min_refresh_seconds", settings.minRefreshSeconds);
 	}
-	values->AddInt32("interval_minutes", settings.intervalMinutes);
-	values->AddInt32("min_move_km", (int32)std::lround(settings.minMoveKm));
-	values->AddInt32("confirmations", settings.confirmations);
-	values->AddInt32("min_refresh_seconds", settings.minRefreshSeconds);
 
+	// (the rows of the programs are always made: a cell is named by its row in the last description, whichever page that was)
+	BMessage rowsOnly;
 	for (const auto& program : ListPrograms(settings, seen)) {
-		AddProgramRow(values, settings, program.first, program.second);
+		AddProgramRow(IsAccessPage(page) ? values : &rowsOnly, settings, program.first, program.second);
 		if (rows != NULL)
 			rows->push_back(program.first);
 	}
@@ -215,125 +230,140 @@ FillValues(const Settings& settings, const std::vector<SeenProgram>& seen, BMess
 
 void
 DescribeSettings(const Settings& settings, const std::vector<SeenProgram>& seen, BMessage* values, BMessage* schema, BMessage* defaults, std::vector<std::string>* rows,
-	const std::string& place)
+	const std::string& place, const std::string& page, const std::string& activeProvider)
 {
 	BMessage scratch;
-	FillValues(settings, seen, values != NULL ? values : &scratch, rows, place);
+	FillValues(settings, seen, values != NULL ? values : &scratch, rows, place, page, activeProvider);
+	const bool access = IsAccessPage(page);
 
 	// the schema: the form of the settings
 	if (schema != NULL) {
 		schema->AddInt32(kVersion, 1);
 
-		BMessage lookup;
-		lookup.AddString(kLabel, "Look up the place by my internet address");
-		lookup.AddString(kHelp, "A lookup sends the public address of this computer to a service on the internet (ipwho.is, GeoJS, ipinfo.io). Ask: the window is shown the first time. Never: only a position that is set by hand is used.");
-		lookup.AddString(kKind, "choice");
-		for (const char* value : {"ask", "allow", "never"})
-			lookup.AddString(kChoices, value);
-		for (const char* text : {"Ask me", "Allow", "Never"})
-			lookup.AddString(kChoiceLabels, text);
-		lookup.AddInt32(kOrder, 0);
-		schema->AddMessage("network_lookup", &lookup);
+		if (!access) {
+			BMessage lookup;
+			lookup.AddString(kLabel, "Allow accessing my location?");
+			lookup.AddString(kHelp, "A lookup sends the public address of this computer to a service on the internet (see the services below). Ask me: the window is shown the first time. Never: only a position that is set by hand is used.");
+			lookup.AddString(kKind, "choice");
+			for (const char* value : {"ask", "allow", "never"})
+				lookup.AddString(kChoices, value);
+			for (const char* text : {"Ask me", "Allow", "Never"})
+				lookup.AddString(kChoiceLabels, text);
+			lookup.AddInt32(kOrder, 0);
+			schema->AddMessage("network_lookup", &lookup);
 
-		// a button under it: where does the server think this computer is, now? (a lookup if it is allowed; what it found is shown below)
-		BMessage show;
-		show.AddString(kLabel, "Show Location now");
-		show.AddString("shows", kWhere);
-		show.AddString(kHelp, "Looks the place up now (if the lookup is allowed) and shows what the server found, with how and when, the same as it would tell a program that may know everything.");
-		show.AddString(kKind, "button");
-		show.AddInt32(kOrder, 1);
-		schema->AddMessage(kShowLocation, &show);
+			// a button under it, in the column of the labels: where does the server think this computer is, now? (a lookup if it is allowed; what it found is shown next to it)
+			BMessage show;
+			show.AddString(kLabel, "Show Location now");
+			show.AddString("shows", kWhere);
+			show.AddString(kHelp, "Looks the place up now (if the lookup is allowed) and shows what the server found, with how and when, the same as it would tell a program that may know everything.");
+			show.AddString(kKind, "button");
+			show.AddInt32(kOrder, 1);
+			schema->AddMessage(kShowLocation, &show);
 
-		BMessage where;
-		where.AddString(kLabel, "Place found");
-		where.AddString(kHelp, "What the server knows now: the place, how it was found and when.");
-		where.AddBool(kReadOnly, true);
-		where.AddInt32(kOrder, 2);
-		schema->AddMessage(kWhere, &where);
+			BMessage where;
+			where.AddString(kLabel, "Place found");
+			where.AddString(kHelp, "What the server knows now: the place, the service that found it and when.");
+			where.AddBool(kReadOnly, true);
+			where.AddInt32(kOrder, 2);
+			schema->AddMessage(kWhere, &where);
 
-		BMessage precision;
-		precision.AddString(kLabel, "Programs may know");
-		precision.AddString(kHelp, "The finest location that programs are told, unless they have a limit of their own (the programs that have asked are listed below). A program can ask for less than this, never for more. The server keeps the finest fix it has.");
-		precision.AddString(kKind, "choice");
-		AddLevels(&precision, false, GranularityName(settings.maxPrecision), "");
-		precision.AddInt32(kOrder, 3);
-		schema->AddMessage("max_precision", &precision);
+			BMessage precision;
+			precision.AddString(kLabel, "Programs may know");
+			precision.AddString(kHelp, "The finest location that programs are told, unless they have a limit of their own (see Application access). A program can ask for less than this, never for more. The server keeps the finest fix it has.");
+			precision.AddString(kKind, "choice");
+			AddLevels(&precision, false, GranularityName(settings.maxPrecision), "");
+			precision.AddInt32(kOrder, 3);
+			schema->AddMessage("max_precision", &precision);
 
-		// the programs that have asked: a table with a check box for each (may it know where I am at all) and the finest level it may know
-		BMessage table;
-		table.AddString(kLabel, "Programs that have asked where this computer is");
-		table.AddString(kHelp, "Click a box to allow or refuse a program, click a level to choose how much it may know. A change counts at once, also for a program that is asking already.");
-		table.AddString(kKind, "table");
-		table.AddInt32(kOrder, 4);
-		schema->AddMessage(kPrograms, &table);
+			// the services that are asked: a box for each, in the order of the list; the first that answers wins
+			BMessage services;
+			services.AddString(kLabel, "Lookup services");
+			services.AddString(kHelp, "The services that are asked, in this order, until one answers: drag a row to change the order. At least one stays on. A service that answers over http only can be read on the way: it is off unless you switch it on.");
+			services.AddString(kKind, "table");
+			services.AddBool("reorderable", true);
+			services.AddInt32(kOrder, 5);
+			schema->AddMessage(kServices, &services);
 
-		BMessage name;
-		name.AddString(kLabel, "Program");
-		name.AddBool(kReadOnly, true);
-		name.AddInt32(kOrder, 0);
-		schema->AddMessage("programs.name", &name);
+			BMessage use;
+			use.AddString(kLabel, "Use");
+			use.AddInt32(kOrder, 0);
+			schema->AddMessage("services.enabled", &use);
 
-		BMessage signature;
-		signature.AddBool(kHidden, true);
-		schema->AddMessage("programs.program", &signature);
+			BMessage serviceName;
+			serviceName.AddString(kLabel, "Service");
+			serviceName.AddBool(kReadOnly, true);
+			serviceName.AddString("busy_field", "busy");
+			serviceName.AddInt32(kOrder, 1);
+			schema->AddMessage("services.name", &serviceName);
 
-		BMessage allowed;
-		allowed.AddString(kLabel, "Allowed");
-		allowed.AddString(kHelp, "Whether this program may know where the computer is at all.");
-		allowed.AddInt32(kOrder, 1);
-		schema->AddMessage("programs.allowed", &allowed);
+			BMessage serviceInfo;
+			serviceInfo.AddString(kLabel, "Info");
+			serviceInfo.AddBool(kReadOnly, true);
+			serviceInfo.AddInt32(kOrder, 2);
+			schema->AddMessage("services.info", &serviceInfo);
 
-		BMessage level;
-		level.AddString(kLabel, "May know");
-		level.AddString(kHelp, "The finest location this program is told. As the others: what is set above.");
-		level.AddString(kKind, "choice");
-		AddLevels(&level, true, "city", "As the others");
-		level.AddString(kEnabledWhen, "allowed=true");
-		level.AddInt32(kOrder, 2);
-		schema->AddMessage("programs.level", &level);
+			BMessage serviceId;
+			serviceId.AddBool(kHidden, true);
+			schema->AddMessage("services.id", &serviceId);
+			BMessage serviceBusy;
+			serviceBusy.AddBool(kHidden, true);
+			schema->AddMessage("services.busy", &serviceBusy);
 
-		// the services that are asked: a box for each, in the order of the list; the first that answers wins
-		BMessage services;
-		services.AddString(kLabel, "Lookup services");
-		services.AddString(kHelp, "The services that are asked, in this order, until one answers: drag a row to change the order. At least one stays on. A service that answers over http only can be read on the way: it is off unless you switch it on.");
-		services.AddString(kKind, "table");
-		services.AddBool("reorderable", true);
-		services.AddInt32(kOrder, 5);
-		schema->AddMessage(kServices, &services);
+			AddNumberField(schema, "interval_minutes", "Look again every (minutes)", "Also when the network changes.", 5, 1440, 6);
+			AddNumberField(schema, "min_move_km", "The same place within (km)", "A new fix within this distance of the announced one is the same place.", 1, 500, 7);
+			AddNumberField(schema, "confirmations", "Lookups that must agree on a move", "A move is announced when this many lookups in a row say the same.", 1, 5, 8);
+			AddNumberField(schema, "min_refresh_seconds", "Lookups at most every (seconds)", "However often a program asks.", 10, 3600, 9);
+		} else {
+			// the programs that have asked: a table with a check box for each (may it know where I am at all) and the finest level it may know; the table is there also while it is empty
+			BMessage table;
+			table.AddString(kLabel, "Applications with access to your location");
+			table.AddString(kHelp, "Click a box to allow or refuse a program, click a level to choose how much it may know. A change counts at once, also for a program that is asking already. A program is listed when it has asked for the first time.");
+			table.AddString(kKind, "table");
+			table.AddInt32(kOrder, 4);
+			schema->AddMessage(kPrograms, &table);
 
-		BMessage use;
-		use.AddString(kLabel, "Use");
-		use.AddInt32(kOrder, 0);
-		schema->AddMessage("services.enabled", &use);
+			BMessage name;
+			name.AddString(kLabel, "Program");
+			name.AddBool(kReadOnly, true);
+			name.AddInt32(kOrder, 0);
+			schema->AddMessage("programs.name", &name);
 
-		BMessage serviceName;
-		serviceName.AddString(kLabel, "Service");
-		serviceName.AddBool(kReadOnly, true);
-		serviceName.AddInt32(kOrder, 1);
-		schema->AddMessage("services.name", &serviceName);
+			BMessage signature;
+			signature.AddBool(kHidden, true);
+			schema->AddMessage("programs.program", &signature);
 
-		BMessage serviceId;
-		serviceId.AddBool(kHidden, true);
-		schema->AddMessage("services.id", &serviceId);
+			BMessage allowed;
+			allowed.AddString(kLabel, "Allowed");
+			allowed.AddString(kHelp, "Whether this program may know where the computer is at all.");
+			allowed.AddInt32(kOrder, 1);
+			schema->AddMessage("programs.allowed", &allowed);
 
-		AddNumberField(schema, "interval_minutes", "Look again every (minutes)", "Also when the network changes.", 5, 1440, 6);
-		AddNumberField(schema, "min_move_km", "The same place within (km)", "A new fix within this distance of the announced one is the same place.", 1, 500, 7);
-		AddNumberField(schema, "confirmations", "Lookups that must agree on a move", "A move is announced when this many lookups in a row say the same.", 1, 5, 8);
-		AddNumberField(schema, "min_refresh_seconds", "Lookups at most every (seconds)", "However often a program asks.", 10, 3600, 9);
+			BMessage level;
+			level.AddString(kLabel, "May know");
+			level.AddString(kHelp, "The finest location this program is told. As the others: what is set under Location.");
+			level.AddString(kKind, "choice");
+			AddLevels(&level, true, "city", "As the others");
+			level.AddString(kEnabledWhen, "allowed=true");
+			level.AddInt32(kOrder, 2);
+			schema->AddMessage("programs.level", &level);
+		}
 	}
 
 	// the defaults: what Defaults puts back (every program without a limit of its own)
 	if (defaults != NULL) {
 		Settings withoutRules;
-		FillValues(withoutRules, seen, defaults, NULL, place);
+		FillValues(withoutRules, seen, defaults, NULL, place, page, std::string());
 		// (the programs that are only in the rules, not seen, are listed too, with no limit)
-		for (const Settings::ProgramRule& rule : settings.programs) {
-			bool listed = false;
-			BMessage row;
-			for (int32 i = 0; defaults->FindMessage(kPrograms, i, &row) == B_OK; i++)
-				listed = listed || row.GetString("program", "") == rule.signature;
-			if (!listed)
-				AddProgramRow(defaults, withoutRules, rule.signature, NameOf(rule.signature));
+		if (access) {
+			for (const Settings::ProgramRule& rule : settings.programs) {
+				bool listed = false;
+				BMessage row;
+				for (int32 i = 0; defaults->FindMessage(kPrograms, i, &row) == B_OK; i++)
+					listed = listed || row.GetString("program", "") == rule.signature;
+				if (!listed)
+					AddProgramRow(defaults, withoutRules, rule.signature, NameOf(rule.signature));
+			}
 		}
 	}
 }
@@ -608,8 +638,9 @@ ApplySettingsChanges(Settings* settings, const BMessage& changes, std::vector<st
 			settings->providers = ordered;
 		}
 	}
-	// the whole message (Revert, Defaults): a program that it does not name has no limit of its own any more
-	if (changes.HasString("network_lookup") && changes.HasString("max_precision")) {
+	// the whole table (Revert, Defaults of the page of the programs): a program that it does not name has no limit of its own any more
+	// (only the page of the programs has them: a whole message of the first page, the services that were moved, leaves the rules of the programs alone)
+	if (changes.HasMessage("programs")) {
 		std::vector<std::string> before;
 		for (const Settings::ProgramRule& rule : settings->programs)
 			before.push_back(rule.signature);

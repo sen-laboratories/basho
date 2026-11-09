@@ -35,7 +35,7 @@ static int32
 Find(LocationClient& client, const char* signature, BMessage* row)
 {
 	BMessage settings;
-	if (client.GetSettings(&settings) != B_OK)
+	if (client.GetSettings(&settings, NULL, NULL, "access") != B_OK)
 		return -1;
 	BMessage each;
 	for (int32 i = 0; settings.FindMessage("programs", i, &each) == B_OK; i++) {
@@ -80,7 +80,7 @@ int main()
 	CHECK(client.SetProgramLimit(kOther, "country") == B_OK);
 
 	BMessage settings, schema, defaults;
-	CHECK(client.GetSettings(&settings, &schema, &defaults) == B_OK);
+	CHECK(client.GetSettings(&settings, &schema, &defaults, "access") == B_OK);
 	BMessage table, name, program, allowed, level;
 	CHECK(schema.FindMessage("programs", &table) == B_OK && strcmp(table.GetString("kind", ""), "table") == 0);
 	CHECK(schema.FindMessage("programs.name", &name) == B_OK && name.GetBool("readonly", false));
@@ -130,7 +130,7 @@ int main()
 	CHECK(Find(client, kProgram, &row) == index && strcmp(row.GetString("level", ""), "country") == 0);
 
 	// the whole message (Revert, Defaults): a row says what its program may know, a program that is not in it has no limit any more
-	client.GetSettings(&settings);
+	client.GetSettings(&settings, NULL, NULL, "access");
 	BMessage changed;
 	{
 		BMessage each;
@@ -141,9 +141,7 @@ int main()
 			if (i != other)
 				changed.AddMessage("programs", &each);
 		}
-		// (a whole message has the settings that tell it from a change of a cell)
-		changed.AddString("network_lookup", settings.GetString("network_lookup", "never"));
-		changed.AddString("max_precision", settings.GetString("max_precision", "city"));
+		// (the whole page of the programs is the table and nothing else)
 	}
 	CHECK(client.ApplySettings(changed) == B_OK);
 	CHECK(Find(client, kProgram, &row) >= 0 && !row.GetBool("allowed", true));
@@ -153,6 +151,17 @@ int main()
 	{
 		BMessage now, schema2, ignoredDefaults;
 		CHECK(client.GetSettings(&now, &schema2, &ignoredDefaults) == B_OK);
+		// the pages: the first has no programs, the page `access` has only them (the table is in its schema also while it has no rows)
+		CHECK(!now.HasMessage("programs") && !schema2.HasMessage("programs"));
+		BMessage accessValues, accessSchema, lookupField;
+		CHECK(client.GetSettings(&accessValues, &accessSchema, NULL, "access") == B_OK);
+		CHECK(accessSchema.HasMessage("programs") && accessSchema.HasMessage("programs.level") && !accessValues.HasString("network_lookup") && !accessSchema.HasMessage("services"));
+		CHECK(schema2.FindMessage("network_lookup", &lookupField) == B_OK && strcmp(lookupField.GetString("label", ""), "Allow accessing my location?") == 0);
+		BMessage infoColumn, nameColumn;
+		CHECK(schema2.FindMessage("services.info", &infoColumn) == B_OK && infoColumn.GetBool("readonly", false));
+		CHECK(schema2.FindMessage("services.name", &nameColumn) == B_OK && strcmp(nameColumn.GetString("busy_field", ""), "busy") == 0);
+		BMessage firstService;
+		CHECK(now.FindMessage("services", 0, &firstService) == B_OK && strlen(firstService.GetString("info", "")) > 0 && firstService.HasBool("busy"));
 		BMessage services, use, serviceName, button, where;
 		CHECK(schema2.FindMessage("services", &services) == B_OK && strcmp(services.GetString("kind", ""), "table") == 0);
 		CHECK(schema2.FindMessage("services.enabled", &use) == B_OK);

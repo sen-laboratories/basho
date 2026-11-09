@@ -152,11 +152,11 @@ const std::vector<Provider>&
 AllProviders()
 {
 	static const std::vector<Provider> providers = {
-		{"ipwho.is", "ipwho.is", "https://ipwho.is/", true, ParseIpwhois},
-		{"geojs", "GeoJS (geojs.io)", "https://get.geojs.io/v1/ip/geo.json", true, ParseGeojs},
-		{"ipinfo", "ipinfo.io", "https://ipinfo.io/json", true, ParseIpinfo},
+		{"ipwho.is", "ipwho.is", "https://ipwho.is/", true, ParseIpwhois, "Secure (https), no key needed"},
+		{"geojs", "GeoJS (geojs.io)", "https://get.geojs.io/v1/ip/geo.json", true, ParseGeojs, "Secure (https), says how exact the place is"},
+		{"ipinfo", "ipinfo.io", "https://ipinfo.io/json", true, ParseIpinfo, "Secure (https), no key needed"},
 		// (http only on the free plan: the answer can be read and changed on the way, so it is asked only if the setting names it)
-		{"ip-api", "ip-api.com (no https)", "http://ip-api.com/json/?fields=status,lat,lon,city,regionName,countryCode,timezone", false, ParseIpApi},
+		{"ip-api", "ip-api.com", "http://ip-api.com/json/?fields=status,lat,lon,city,regionName,countryCode,timezone", false, ParseIpApi, "Not secure: http only, the answer can be read on the way"},
 	};
 	return providers;
 }
@@ -183,7 +183,7 @@ DefaultProviderIds()
 }
 
 LookupResult
-Lookup(const std::vector<std::string>& providerIds, const HttpGet& get, int64_t now)
+Lookup(const std::vector<std::string>& providerIds, const HttpGet& get, int64_t now, const ProviderProgress& progress)
 {
 	LookupResult result;
 	for (const std::string& id : providerIds) {
@@ -193,6 +193,8 @@ Lookup(const std::vector<std::string>& providerIds, const HttpGet& get, int64_t 
 			continue;
 		}
 		result.tried.push_back(id);
+		if (progress)
+			progress(id);
 		std::string body, error;
 		if (!get(provider->url, &body, &error)) {
 			result.error += id + ": " + error + "\n";

@@ -173,9 +173,11 @@ LocationClient::GetStatus(BMessage* status, bigtime_t timeout)
 
 
 status_t
-LocationClient::GetSettings(BMessage* settings, BMessage* schema, BMessage* defaults)
+LocationClient::GetSettings(BMessage* settings, BMessage* schema, BMessage* defaults, const char* page)
 {
 	BMessage request(LOCATION_SETTINGS);
+	if (page != NULL)
+		request.AddString("page", page);
 	BMessage reply;
 	status_t result = _Send(&request, &reply, 3000000);
 	if (result != B_OK)

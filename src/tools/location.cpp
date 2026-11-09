@@ -223,6 +223,12 @@ private:
 					fprintf(stderr, "no settings: %s\n", strerror(result));
 					return 1;
 				}
+				// (the programs are a page of their own: what is printed is both)
+				BMessage access, row;
+				if (client.GetSettings(&access, NULL, NULL, "access") == B_OK) {
+					for (int32 i = 0; access.FindMessage("programs", i, &row) == B_OK; i++)
+						settings.AddMessage("programs", &row);
+				}
 				PrintSettings(settings);
 				return 0;
 			}

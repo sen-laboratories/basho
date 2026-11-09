@@ -48,10 +48,11 @@ public:
 	status_t				GetStatus(BMessage* status, bigtime_t timeout = 2000000);
 
 	/**
-	 * The settings of the server as a message (and the schema that describes them, if you want it): what the settings window shows. The programs that have a limit or have asked are the
-	 * messages of the field `programs` (a table in the form): `name`, `program` (the signature), `allowed` (bool) and `level` (`default`, `city`, `region`, `country` or a number of km).
+	 * The settings of the server as a message (and the schema that describes them, if you want it): what the settings window shows. They have two pages: the first (`page` NULL) has all
+	 * but the programs; the page `access` has the programs that have a limit or have asked, the messages of the field `programs` (a table in the form): `name`, `program` (the signature),
+	 * `allowed` (bool) and `level` (`default`, `city`, `region`, `country` or a number of km).
 	 */
-	status_t				GetSettings(BMessage* settings, BMessage* schema = NULL, BMessage* defaults = NULL);
+	status_t				GetSettings(BMessage* settings, BMessage* schema = NULL, BMessage* defaults = NULL, const char* page = NULL);
 	/** Changes: fields under their path keys, as the settings window sends them (`max_precision`, `programs_03.level`; the row is the number in the last GetSettings()), or the field `program:<signature with its dots written as %2E>`. `detail` says what was refused. */
 	status_t				ApplySettings(const BMessage& changes, BString* detail = NULL);
 	/** What one program may know at most; `level` is `default` to take its limit away (it gets the general one again). */

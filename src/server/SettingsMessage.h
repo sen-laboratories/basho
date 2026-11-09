@@ -36,10 +36,11 @@ extern const char* const kProgramPrefix;
 /** The value of a program that has no limit of its own. */
 extern const char* const kProgramDefault;
 
-/** Fills the three messages. `seen` are the programs that have asked (they are listed with the rules, so that a limit can be set for a program that has not got one yet). `rows` gets the signatures
+/** Fills the three messages. The settings have two pages: the first (`page` empty) has all but the programs; the page `access` has the table of the programs (`programs`, there also while it has no row: the schema says so).
+ *  `activeProvider` is the id of the lookup service that is asked now (its row of `services` has `busy`).  `seen` are the programs that have asked (they are listed with the rules, so that a limit can be set for a program that has not got one yet). `rows` gets the signatures
  *  of the programs in the order of the rows of the table: the change of a cell names its row by the number in this list. */
 void	DescribeSettings(const Settings& settings, const std::vector<SeenProgram>& seen, BMessage* values, BMessage* schema, BMessage* defaults, std::vector<std::string>* rows = NULL,
-	const std::string& place = std::string());
+	const std::string& place = std::string(), const std::string& page = std::string(), const std::string& activeProvider = std::string());
 
 /**
  * Applies changes: a flat message of fields under their path keys (`max_precision`, `programs_03.level`, `program:<signature>`), or the whole settings message (after Revert and Defaults). Valid changes are applied to `settings`, the names of those that are not go to `refused`. Returns B_OK if all were valid, else B_BAD_VALUE.

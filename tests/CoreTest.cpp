@@ -149,6 +149,17 @@ TestLookupFallback()
 
 	r = Lookup({}, bad, 5);
 	CHECK(!r.ok && !r.error.empty());
+
+	// the progress: each service that is asked is named before it is asked (the settings show a spinner at it), a service that is not known is not
+	std::vector<std::string> progress;
+	asked.clear();
+	r = Lookup({"ipwho.is", "bogus", "geojs", "ipinfo"}, bad, 5, [&](const std::string& id) { progress.push_back(id); });
+	CHECK((progress == std::vector<std::string>{"ipwho.is", "geojs", "ipinfo"}));
+	// every provider has a short description for the list of the services, and its name does not have to say whether it is secure
+	for (const Provider& provider : AllProviders()) {
+		CHECK(provider.info != NULL && std::string(provider.info).size() > 8);
+		CHECK(std::string(provider.name).find("http") == std::string::npos);
+	}
 }
 
 static void

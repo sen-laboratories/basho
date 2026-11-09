@@ -25,6 +25,7 @@ struct Provider {
 	const char*	url;
 	bool		secure;		///< https: the answer cannot be read or changed on the way
 	bool		(*parse)(const std::string& body, Fix* fix);	///< fills the fix from the answer; false if it says no or is no answer
+	const char*	info;		///< a short description for the list of the services in the settings: how it is reached, what is special
 };
 
 const std::vector<Provider>&	AllProviders();
@@ -48,7 +49,10 @@ struct LookupResult {
 	std::vector<std::string>	tried;	///< the ids that were asked
 };
 
+/** Tells which provider is asked now (called before each one, from the thread that does the lookup). */
+using ProviderProgress = std::function<void(const std::string& id)>;
+
 /** Asks the providers one after the other until one gives a valid fix; the fix has the provider and `now` (seconds since the epoch). */
-LookupResult	Lookup(const std::vector<std::string>& providerIds, const HttpGet& get, int64_t now);
+LookupResult	Lookup(const std::vector<std::string>& providerIds, const HttpGet& get, int64_t now, const ProviderProgress& progress = ProviderProgress());
 
 }	// namespace basho

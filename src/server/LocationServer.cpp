@@ -20,8 +20,11 @@
 #include <Path.h>
 #include <Roster.h>
 
+#include <OS.h>
+
 #include <algorithm>
 #include <cstdio>
+#include <cstdlib>
 #include <ctime>
 #include <fstream>
 #include <sstream>
@@ -144,10 +147,20 @@ LocationServer::MessageReceived(BMessage* message)
 		case LOCATION_GET_STATUS:		_GetStatus(message); break;
 		case LOCATION_SETTINGS:			_SettingsRequest(message); break;
 		case LOCATION_SETTINGS_SET:		_SettingsSet(message); break;
-		case LOCATION_SETTINGS_CLOSE:	break;
+		case LOCATION_SETTINGS_CLOSE:
+		{
+			// (the window that closes its session: it is not told any more)
+			const BMessenger closing = message->ReturnAddress();
+			fWatchers.erase(std::remove_if(fWatchers.begin(), fWatchers.end(), [&closing](const SettingsWatcher& w) { return w.target == closing; }), fWatchers.end());
+			break;
+		}
 
 		case kLookupDone:
 			_LookupDone(message);
+			break;
+		case kLookupProgress:
+			fActiveProvider = message->GetString("provider", "");
+			_PushSettings();
 			break;
 		case kTimer:
 			if (_WantsFreshFix())
@@ -383,19 +396,11 @@ LocationServer::_AskConsent()
 	fAsked = true;
 	fAskPending = true;
 
-	std::string names;
-	for (const std::string& id : fSettings.ProviderIds()) {
-		const basho::Provider* provider = basho::FindProvider(id);
-		if (provider == NULL)
-			continue;
-		names += names.empty() ? provider->name : std::string(", ") + provider->name;
-	}
+	// (short: what is asked, what it costs, where to change it)
 	std::string text =
-		"The location server would like to find out roughly where this computer is: the city, not the street.\n\n"
-		"For that it asks a public lookup service which place your internet address belongs to (" + names + ", one after the other until one answers). "
-		"The service sees your internet address, nothing else is sent, and the answer stays on this computer.\n\n"
-		"Programs that want to know where you are (a context that changes with the city, a place lookup that prefers what is near you) can then ask this server. "
-		"You can change this in ~/config/settings/location_server.";
+		"Allow finding out roughly where this computer is?\n\n"
+		"Programs can then ask for the city you are in. For that your internet address is sent to a public lookup service. "
+		"You can change this later in the settings, under Location.";
 	BAlert* alert = new BAlert("Location server", text.c_str(), "Not now", "Never", "Allow", B_WIDTH_FROM_WIDEST, B_OFFSET_SPACING, B_INFO_ALERT);
 	alert->SetShortcut(0, B_ESCAPE);
 	BMessage* answer = new BMessage(kConsentAnswer);
@@ -427,13 +432,22 @@ LocationServer::_StartLookup(const char* why)
 	fLookingUp = true;
 	fLastLookupStart = system_time();
 	fprintf(stderr, "location_server: looking up (%s)\n", why);
+	_PushSettings();
 
 	std::vector<std::string> ids = fSettings.ProviderIds();
 	BMessenger self(this);
 	std::thread([ids, self]() mutable {
 		basho::LookupResult result = basho::Lookup(ids, [](const std::string& url, std::string* body, std::string* error) {
 			return basho::HttpFetch(url, body, error);
-		}, (int64_t)time(NULL));
+		}, (int64_t)time(NULL), [self](const std::string& id) {
+			// (the settings window shows which service is asked now)
+			BMessage progress(kLookupProgress);
+			progress.AddString("provider", id.c_str());
+			self.SendMessage(&progress);
+			// (for the tests: BASHO_TEST_DELAY=<seconds> makes each service take that long, so that the spinner in the settings can be looked at)
+			if (const char* delay = getenv("BASHO_TEST_DELAY"))
+				snooze((bigtime_t)(atof(delay) * 1000000));
+		});
 		BMessage done(kLookupDone);
 		done.AddBool("ok", result.ok);
 		if (result.ok)
@@ -459,6 +473,7 @@ void
 LocationServer::_LookupDone(BMessage* message)
 {
 	fLookingUp = false;
+	fActiveProvider.clear();
 	Fix fix;
 	if (!message->GetBool("ok", false) || !MessageToFix(message, &fix) || !fix.hasPosition) {
 		fLastError = message->GetString("error", "the lookup failed");
@@ -468,6 +483,7 @@ LocationServer::_LookupDone(BMessage* message)
 		if (!fTracker.HasCurrent() && !fOverrideActive)
 			_ScheduleLookup(std::min<bigtime_t>(kSecond * 60 * (1 << std::min(fFailures - 1, 4)), (bigtime_t)fSettings.intervalMinutes * 60 * kSecond));
 		_AnswerWaiters();
+		_PushSettings();
 		return;
 	}
 	fFailures = 0;
@@ -489,6 +505,7 @@ LocationServer::_LookupDone(BMessage* message)
 			_Announce();
 	}
 	_AnswerWaiters();
+	_PushSettings();
 }
 
 
@@ -664,6 +681,7 @@ LocationServer::_NoteProgram(const std::string& signature, const std::string& na
 	program.name = name;
 	fSeen.push_back(program);
 	_SaveSeen();
+	_PushSettings();		// (a program that asked for the first time is a row in the settings that are open)
 }
 
 
@@ -697,22 +715,33 @@ LocationServer::_SaveSeen()
 
 
 void
-LocationServer::_SettingsRequest(BMessage* message)
+LocationServer::_MakeSettingsReply(const std::string& page, int32 serial, BMessage* reply)
 {
 	BMessage values, schema, defaults;
 	fSettingsRows.clear();
-	basho::DescribeSettings(fSettings, fSeen, &values, &schema, &defaults, &fSettingsRows, _PlaceText());
+	basho::DescribeSettings(fSettings, fSeen, &values, &schema, &defaults, &fSettingsRows, _PlaceText(), page, fActiveProvider);
 
-	BMessage reply(LOCATION_SETTINGS_REPLY);
-	reply.AddInt32("result", B_OK);
-	reply.AddInt32("protocol", 1);
-	reply.AddString("SEN:plugin", LOCATION_SERVER_SIGNATURE);
-	reply.AddMessage("settings", &values);
-	reply.AddMessage("schema", &schema);
-	reply.AddMessage("defaults", &defaults);
-	int32 serial;
-	if (message->FindInt32("serial", &serial) == B_OK)
-		reply.AddInt32("serial", serial);
+	reply->what = LOCATION_SETTINGS_REPLY;
+	reply->AddInt32("result", B_OK);
+	reply->AddInt32("protocol", 1);
+	reply->AddString("SEN:plugin", LOCATION_SERVER_SIGNATURE);
+	reply->AddMessage("settings", &values);
+	reply->AddMessage("schema", &schema);
+	reply->AddMessage("defaults", &defaults);
+	if (serial != 0)
+		reply->AddInt32("serial", serial);
+}
+
+
+void
+LocationServer::_SettingsRequest(BMessage* message)
+{
+	// (the settings have pages: the first, and `access`; the window asks for the one that it shows)
+	const std::string page = message->GetString("page", "");
+	int32 serial = 0;
+	message->FindInt32("serial", &serial);
+	BMessage reply;
+	_MakeSettingsReply(page, serial, &reply);
 
 	BMessenger owner;
 	if (message->IsSourceWaiting()) {
@@ -720,7 +749,31 @@ LocationServer::_SettingsRequest(BMessage* message)
 	} else if (message->FindMessenger("reply_to", &owner) == B_OK && owner.IsValid()) {
 		owner.SendMessage(&reply);
 	} else if (message->ReturnAddress().IsValid()) {
-		message->ReturnAddress().SendMessage(&reply);
+		owner = message->ReturnAddress();
+		owner.SendMessage(&reply);
+	}
+
+	// a window that shows the settings is told when they change on their own (a lookup that goes on, a program that asked): one page for each window
+	if (owner.IsValid() && !message->IsSourceWaiting()) {
+		auto same = [&owner](const SettingsWatcher& w) { return w.target == owner; };
+		fWatchers.erase(std::remove_if(fWatchers.begin(), fWatchers.end(), same), fWatchers.end());
+		fWatchers.push_back(SettingsWatcher{owner, serial, page});
+	}
+}
+
+
+void
+LocationServer::_PushSettings()
+{
+	for (auto it = fWatchers.begin(); it != fWatchers.end();) {
+		if (!it->target.IsValid()) {
+			it = fWatchers.erase(it);
+			continue;
+		}
+		BMessage update;
+		_MakeSettingsReply(it->page, it->serial, &update);
+		it->target.SendMessage(&update);
+		++it;
 	}
 }
 
@@ -756,7 +809,7 @@ LocationServer::_ReplySettings(BMessage* to, status_t result, const std::vector<
 {
 	BMessage values;
 	fSettingsRows.clear();
-	basho::DescribeSettings(fSettings, fSeen, &values, NULL, NULL, &fSettingsRows, _PlaceText());
+	basho::DescribeSettings(fSettings, fSeen, &values, NULL, NULL, &fSettingsRows, _PlaceText(), to->GetString("page", ""), fActiveProvider);
 	BMessage reply(B_REPLY);
 	reply.AddInt32("result", result);
 	if (!refused.empty()) {
@@ -795,20 +848,17 @@ LocationServer::_PlaceText() const
 	}
 	if (text.empty())
 		text = "Somewhere";
-	if (fix.hasPosition) {
-		char position[64];
-		snprintf(position, sizeof(position), " (%.2f, %.2f)", fix.latitude, fix.longitude);
-		text += position;
-	}
-	text += fix.manual ? std::string(", set by hand") : ", by " + fix.provider;
-	if (fix.timestamp > 0) {
+	// (how it was found and when, in brackets: `Vienna, AT (ipwho.is @17:37)`; the position itself is not shown)
+	std::string how = fix.manual ? std::string("set by hand") : fix.provider;
+	if (fix.timestamp > 0 && !fix.manual) {
 		const time_t when = (time_t)fix.timestamp;
 		char clock[32];
 		struct tm local;
 		localtime_r(&when, &local);
-		strftime(clock, sizeof(clock), " at %H:%M", &local);
-		text += clock;
+		strftime(clock, sizeof(clock), " @%H:%M", &local);
+		how += clock;
 	}
+	text += " (" + how + ")";
 	return text;
 }
 
