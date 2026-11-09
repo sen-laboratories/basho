@@ -11,6 +11,7 @@ packager		"Gregor B. Rosenauer <semantic.extensions@gmail.com>"
 vendor			"SEN Labs e.U."
 copyrights		{
 	"2026 SEN Labs e.U."
+	"Haiku, Inc. (the Hand and Globe icons, combined in the icon of the server)"
 }
 licenses		{
 	"MIT"

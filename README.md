@@ -137,6 +137,11 @@ Another system (Hokku) needs its own `HttpClient.cpp` and the transport of the m
 `~/config/settings/location_server` (written with the defaults at the first start): `network_lookup ask|allow|never`, `max_precision city|region|country|<km>`, `providers`, `interval_minutes`,
 `min_move_km`, `confirmations`, `min_refresh_seconds`. The file is read when the server starts (`location quit`, the next call starts it again). The server is started with `--allow-network` to allow the lookup for one run without writing anything (the tests use it).
 
+## Credits
+
+The icon of the server (`images/basho-server.svg`) combines the **Hand** and the **Globe** icons of Haiku, Inc. (MIT license): the world, served. It is made into the vector icon of the program by
+`svg2hvif.py` of [SEN](https://github.com/sen-laboratories/sento/tree/1.0-sophia/scripts).
+
 ## Status
 
 A prototype. Done: the server, the client, the tool, per-program limits, the settings protocol and its node in the settings window of SEN, packages. Not done: a launch-daemon job (the client starts the
