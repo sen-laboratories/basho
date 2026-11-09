@@ -10,12 +10,11 @@
 namespace basho {
 
 /**
- * How a program is named in a field of the settings message. The form of Shoji does not find a field whose name has a dot in it (a dot separates the names of nested messages in a path key),
- * and a signature has dots, so a dot is written as %2E in the name (and a backslash as %5C, a percent sign as %25). The fields are `program:<coded signature>` (the level of the limit) and
- * `programname:<coded signature>` (the name for people). Header only: the server, the settings view and the tool use it.
+ * How a program is named in a field of a message that sets its limit (`program:<coded signature>`, the level of the limit: what the client class and the tool send). A signature has dots, and
+ * a dot separates the names of nested messages in a path key, so a dot is written as %2E in the name (and a backslash as %5C, a percent sign as %25). Header only: the server, the client and
+ * the tool use it. (The table of the settings has the signature in a field of its own, `programs_03.program`.)
  */
 inline const char*	ProgramPrefix() { return "program:"; }
-inline const char*	ProgramNamePrefix() { return "programname:"; }
 
 inline std::string
 EncodeProgramKey(const std::string& signature)
@@ -55,22 +54,12 @@ DecodeProgramKey(const std::string& encoded, size_t from = 0)
 	return signature;
 }
 
-/** The signature of a field name `program:<coded>`, "" if the name is none of a program (`programname:` is not). */
+/** The signature of a field name `program:<coded>`, "" if the name is none of a program. */
 inline std::string
 SignatureOfProgramField(const std::string& name)
 {
 	const size_t prefix = strlen(ProgramPrefix());
 	if (name.compare(0, prefix, ProgramPrefix()) != 0)
-		return std::string();
-	return DecodeProgramKey(name, prefix);
-}
-
-/** The signature of a field name `programname:<coded>`, "" if it is none. */
-inline std::string
-SignatureOfNameField(const std::string& name)
-{
-	const size_t prefix = strlen(ProgramNamePrefix());
-	if (name.compare(0, prefix, ProgramNamePrefix()) != 0)
 		return std::string();
 	return DecodeProgramKey(name, prefix);
 }

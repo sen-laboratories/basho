@@ -22,7 +22,6 @@
  *
  * Exit status: 0 ok; 2 the user has not allowed the lookup; 3 no fix (yet); 1 anything else.
  */
-#include "ProgramKey.h"
 
 #include <location/Location.h>
 #include <location/LocationClient.h>
@@ -66,6 +65,16 @@ PrintSettings(const BMessage& settings)
 	type_code type;
 	int32 count;
 	for (int32 i = 0; settings.GetInfo(B_ANY_TYPE, i, &name, &type, &count) == B_OK; i++) {
+		if (type == B_MESSAGE_TYPE && std::string(name) == "programs") {
+			// (the table of the programs: a line for each, with its signature and what it may know)
+			for (int32 v = 0; v < count; v++) {
+				BMessage row;
+				if (settings.FindMessage(name, v, &row) != B_OK)
+					continue;
+				printf("program %-48s %s\n", row.GetString("program", ""), row.GetBool("allowed", true) ? row.GetString("level", "default") : "none");
+			}
+			continue;
+		}
 		if (type == B_MESSAGE_TYPE) {
 			BMessage group;
 			settings.FindMessage(name, &group);
@@ -76,14 +85,6 @@ PrintSettings(const BMessage& settings)
 				printf("  %-48s %s\n", inner, group.GetString(inner, ""));
 			continue;
 		}
-		// (a program: its signature as it is, not as the name of a field has it, and a line for the name only with the limit)
-		const std::string signature = basho::SignatureOfProgramField(name);
-		if (!signature.empty()) {
-			printf("program %-48s %s\n", signature.c_str(), settings.GetString(name, ""));
-			continue;
-		}
-		if (!basho::SignatureOfNameField(name).empty())
-			continue;
 		printf("%-22s", name);
 		for (int32 v = 0; v < count; v++) {
 			const char* text;

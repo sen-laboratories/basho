@@ -66,7 +66,8 @@ location quit
 
 The settings (and the limits of the programs) are a message in the settings protocol of SEN: a host sends `LOCATION_SETTINGS` and gets the values, a schema (labels, choices, ranges) and the
 defaults, and sends changed fields back with `LOCATION_SETTINGS_SET`. The settings window of **SEN** (Deskbar menu, *Settings…*) has a node **SEN › Location** when Basho is installed, with
-the form of Shoji; each program that has asked is a line with a menu of what it may know. Anything else that speaks the protocol (the form of Shoji is a replicant that any program can host) can
+the form of Shoji; the programs that have asked are **a table** (the array `programs` with `kind = table` in the schema): a row for each, a check box for whether it may know where the computer is at all,
+and a menu of the finest level it may know (a click on a cell puts the control that edits it in its place). Anything else that speaks the protocol (the form of Shoji is a replicant that any program can host) can
 show the same. Without SEN, `location config` and `location grant` do the same from the shell, and `~/config/settings/location_server` is a text file.
 
 ## Build and test (on Haiku)

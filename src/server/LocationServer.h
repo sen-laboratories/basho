@@ -97,6 +97,7 @@ private:
 	};
 	std::vector<Subscriber>	fSubscribers;
 	std::vector<basho::SeenProgram>	fSeen;		///< the programs that have asked, for the list in the settings
+	std::vector<std::string>		fSettingsRows;	///< the programs of the table in the settings as they were last described: a change of a cell names its row by the number in this list
 	std::vector<BMessage>	fWaiters;		///< GET_CURRENT with force: answered when the lookup is done
 
 	bool					fSessionAllow;	///< --allow-network: agreed for this run only

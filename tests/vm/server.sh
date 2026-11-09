@@ -137,6 +137,13 @@ check "...and a setting that does not exist" sh -c "! '$BIN/location' config set
 "$BIN/location" config > "$T/p-config2.txt" 2>&1
 check "an integer setting is changed" grep -q "^interval_minutes *15" "$T/p-config2.txt"
 
+# the table of the programs in the settings message (the protocol of the settings window): rows, cells by their row number, the box, what is wrong, the whole message
+g++ -std=c++20 -Wno-multichar -I"$HERE/include" -o "$T/settings-table" "$HERE/tests/vm/SettingsTable.cpp" "$HERE/lib/liblocation.a" -lbe -lroot -lstdc++ > "$T/settings-table-build.txt" 2>&1
+check "the test of the table builds" test -x "$T/settings-table"
+"$T/settings-table" > "$T/settings-table.txt" 2>&1
+check "the table of the programs: rows, cells by row number, the box, refusals, the whole message" grep -q "^settings table ok" "$T/settings-table.txt"
+cat "$T/settings-table.txt" | grep FAIL
+
 # what was set is still there when the server is started again
 quit_server
 "$BIN/location_server" > "$T/p-restart.log" 2>&1 &

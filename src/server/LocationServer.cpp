@@ -694,7 +694,8 @@ void
 LocationServer::_SettingsRequest(BMessage* message)
 {
 	BMessage values, schema, defaults;
-	basho::DescribeSettings(fSettings, fSeen, &values, &schema, &defaults);
+	fSettingsRows.clear();
+	basho::DescribeSettings(fSettings, fSeen, &values, &schema, &defaults, &fSettingsRows);
 
 	BMessage reply(LOCATION_SETTINGS_REPLY);
 	reply.AddInt32("result", B_OK);
@@ -726,11 +727,12 @@ LocationServer::_SettingsSet(BMessage* message)
 	std::vector<std::string> refused;
 	Settings before = fSettings;
 	if (result == B_OK)
-		result = basho::ApplySettingsChanges(&fSettings, changes, &refused);
+		result = basho::ApplySettingsChanges(&fSettings, changes, &refused, fSettingsRows);
 	_SettingsChanged(before);
 
 	BMessage values;
-	basho::DescribeSettings(fSettings, fSeen, &values, NULL, NULL);
+	fSettingsRows.clear();
+	basho::DescribeSettings(fSettings, fSeen, &values, NULL, NULL, &fSettingsRows);
 	BMessage reply(B_REPLY);
 	reply.AddInt32("result", result);
 	if (!refused.empty()) {

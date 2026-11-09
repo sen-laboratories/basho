@@ -10,14 +10,15 @@
 #include <Message.h>
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
 #include <set>
 
 namespace basho {
 
 const char* const kProgramPrefix = "program:";
-const char* const kProgramNamePrefix = "programname:";
 const char* const kProgramDefault = "default";
 
 // the names of the attributes of a field in the schema (sento: SenSettingsForm.h)
@@ -32,19 +33,18 @@ static const char* const kStep = "step";
 static const char* const kOrder = "order";
 static const char* const kList = "list";
 static const char* const kVersion = "version";
+static const char* const kReadOnly = "readonly";
+static const char* const kHidden = "hidden";
+static const char* const kEnabledWhen = "enabled_when";
+
+// the table of the programs: an array of messages, a row for each program (`kind = table` in the schema); the path key of a cell is `programs_03.level`
+static const char* const kPrograms = "programs";
 
 
 std::string
 ProgramFieldName(const std::string& signature)
 {
 	return std::string(kProgramPrefix) + EncodeProgramKey(signature);
-}
-
-
-std::string
-ProgramNameFieldName(const std::string& signature)
-{
-	return std::string(kProgramNamePrefix) + EncodeProgramKey(signature);
 }
 
 
@@ -95,10 +95,6 @@ AddLevels(BMessage* attributes, bool forProgram, const std::string& current, con
 		if (current == level.value)
 			found = true;
 	}
-	if (forProgram) {
-		attributes->AddString(kChoices, "none");
-		attributes->AddString(kChoiceLabels, "Nothing: it may not know where I am");
-	}
 	// (a radius that was written into the file by hand: the form must be able to show it)
 	if (!found && current != "none") {
 		attributes->AddString(kChoices, current.c_str());
@@ -130,19 +126,11 @@ NameOf(const std::string& signature)
 }
 
 
-static int32
-FillValues(const Settings& settings, const std::vector<SeenProgram>& seen, BMessage* values, BMessage* schema)
+// The programs of the table: those that have a rule, and those that have asked, in the order of their names (an order that does not depend on the rules, so that a row stays
+// where it is while it is changed; the change of a cell names its row by the number it had in the last description).
+static std::vector<std::pair<std::string, std::string>>
+ListPrograms(const Settings& settings, const std::vector<SeenProgram>& seen)
 {
-	values->AddString("network_lookup", NetworkLookupName(settings.networkLookup));
-	values->AddString("max_precision", GranularityName(settings.maxPrecision).c_str());
-	for (const std::string& id : settings.ProviderIds())
-		values->AddString("providers", id.c_str());
-	values->AddInt32("interval_minutes", settings.intervalMinutes);
-	values->AddInt32("min_move_km", (int32)std::lround(settings.minMoveKm));
-	values->AddInt32("confirmations", settings.confirmations);
-	values->AddInt32("min_refresh_seconds", settings.minRefreshSeconds);
-
-	// the programs: those that have a rule, and those that have asked; each is a row of the form (after the general limit)
 	std::vector<std::pair<std::string, std::string>> listed;		// signature, name
 	for (const Settings::ProgramRule& rule : settings.programs)
 		listed.push_back({rule.signature, NameOf(rule.signature)});
@@ -154,38 +142,59 @@ FillValues(const Settings& settings, const std::vector<SeenProgram>& seen, BMess
 		else if (!program.name.empty())
 			found->second = program.name;
 	}
-	// (the place of a field among the others is its number in the order: the programs come after the two settings that they depend on)
-	int32 order = 2;
-	for (const auto& program : listed) {
-		const Settings::ProgramRule* rule = settings.FindProgram(program.first);
-		const std::string level = rule != NULL ? GranularityName(rule->limit) : std::string(kProgramDefault);
-		values->AddString(ProgramFieldName(program.first).c_str(), level.c_str());
-		values->AddString(ProgramNameFieldName(program.first).c_str(), program.second.c_str());
-		if (schema != NULL) {
-			// (the name is for the table of the settings view; the generic form does not show it)
-			BMessage hidden;
-			hidden.AddBool("hidden", true);
-			schema->AddMessage(ProgramNameFieldName(program.first).c_str(), &hidden);
-			BMessage attributes;
-			attributes.AddString(kLabel, (program.second + " may know").c_str());
-			attributes.AddString(kHelp, program.first.c_str());
-			attributes.AddString(kKind, "choice");
-			AddLevels(&attributes, true, level, ("As the others (" + GranularityName(settings.maxPrecision) + ")").c_str());
-			attributes.AddInt32(kOrder, order++);
-			schema->AddMessage(ProgramPathKey(program.first).c_str(), &attributes);
-		}
+	auto lower = [](std::string text) {
+		for (char& c : text)
+			c = (char)tolower((unsigned char)c);
+		return text;
+	};
+	std::stable_sort(listed.begin(), listed.end(), [&lower](const std::pair<std::string, std::string>& a, const std::pair<std::string, std::string>& b) {
+		const std::string x = lower(a.second), y = lower(b.second);
+		return x != y ? x < y : a.first < b.first;
+	});
+	return listed;
+}
+
+
+// One row: the name to show, the signature (hidden), whether the program may know anything, and its level (`default`: as the others)
+static void
+AddProgramRow(BMessage* values, const Settings& settings, const std::string& signature, const std::string& name)
+{
+	const Settings::ProgramRule* rule = settings.FindProgram(signature);
+	const bool allowed = rule == NULL || !rule->limit.IsNone();
+	BMessage row;
+	row.AddString("name", name.c_str());
+	row.AddString("program", signature.c_str());
+	row.AddBool("allowed", allowed);
+	row.AddString("level", rule != NULL && allowed ? GranularityName(rule->limit).c_str() : kProgramDefault);
+	values->AddMessage(kPrograms, &row);
+}
+
+
+static void
+FillValues(const Settings& settings, const std::vector<SeenProgram>& seen, BMessage* values, std::vector<std::string>* rows)
+{
+	values->AddString("network_lookup", NetworkLookupName(settings.networkLookup));
+	values->AddString("max_precision", GranularityName(settings.maxPrecision).c_str());
+	for (const std::string& id : settings.ProviderIds())
+		values->AddString("providers", id.c_str());
+	values->AddInt32("interval_minutes", settings.intervalMinutes);
+	values->AddInt32("min_move_km", (int32)std::lround(settings.minMoveKm));
+	values->AddInt32("confirmations", settings.confirmations);
+	values->AddInt32("min_refresh_seconds", settings.minRefreshSeconds);
+
+	for (const auto& program : ListPrograms(settings, seen)) {
+		AddProgramRow(values, settings, program.first, program.second);
+		if (rows != NULL)
+			rows->push_back(program.first);
 	}
-	return (int32)listed.size();
 }
 
 
 void
-DescribeSettings(const Settings& settings, const std::vector<SeenProgram>& seen, BMessage* values, BMessage* schema, BMessage* defaults)
+DescribeSettings(const Settings& settings, const std::vector<SeenProgram>& seen, BMessage* values, BMessage* schema, BMessage* defaults, std::vector<std::string>* rows)
 {
-	// the values (and the fields of the programs in the schema, which come from the same list)
 	BMessage scratch;
-	const int32 programs = FillValues(settings, seen, values != NULL ? values : &scratch, schema);
-	const int32 after = 2 + programs;		// (the place of the settings that come after the programs)
+	FillValues(settings, seen, values != NULL ? values : &scratch, rows);
 
 	// the schema: the form of the settings
 	if (schema != NULL) {
@@ -210,17 +219,50 @@ DescribeSettings(const Settings& settings, const std::vector<SeenProgram>& seen,
 		precision.AddInt32(kOrder, 1);
 		schema->AddMessage("max_precision", &precision);
 
+		// the programs that have asked: a table with a check box for each (may it know where I am at all) and the finest level it may know
+		BMessage table;
+		table.AddString(kLabel, "Programs that have asked where this computer is");
+		table.AddString(kHelp, "Click a box to allow or refuse a program, click a level to choose how much it may know. A change counts at once, also for a program that is asking already.");
+		table.AddString(kKind, "table");
+		table.AddInt32(kOrder, 2);
+		schema->AddMessage(kPrograms, &table);
+
+		BMessage name;
+		name.AddString(kLabel, "Program");
+		name.AddBool(kReadOnly, true);
+		name.AddInt32(kOrder, 0);
+		schema->AddMessage("programs.name", &name);
+
+		BMessage signature;
+		signature.AddBool(kHidden, true);
+		schema->AddMessage("programs.program", &signature);
+
+		BMessage allowed;
+		allowed.AddString(kLabel, "Allowed");
+		allowed.AddString(kHelp, "Whether this program may know where the computer is at all.");
+		allowed.AddInt32(kOrder, 1);
+		schema->AddMessage("programs.allowed", &allowed);
+
+		BMessage level;
+		level.AddString(kLabel, "May know");
+		level.AddString(kHelp, "The finest location this program is told. As the others: what is set above.");
+		level.AddString(kKind, "choice");
+		AddLevels(&level, true, "city", "As the others");
+		level.AddString(kEnabledWhen, "allowed=true");
+		level.AddInt32(kOrder, 2);
+		schema->AddMessage("programs.level", &level);
+
 		BMessage providers;
 		providers.AddString(kLabel, "Lookup services");
 		providers.AddString(kHelp, "In this order, until one answers: ipwho.is, geojs, ipinfo (https), ip-api (http only).");
 		providers.AddBool(kList, true);
-		providers.AddInt32(kOrder, after);
+		providers.AddInt32(kOrder, 3);
 		schema->AddMessage("providers", &providers);
 
-		AddNumberField(schema, "interval_minutes", "Look again every (minutes)", "Also when the network changes.", 5, 1440, after + 1);
-		AddNumberField(schema, "min_move_km", "The same place within (km)", "A new fix within this distance of the announced one is the same place.", 1, 500, after + 2);
-		AddNumberField(schema, "confirmations", "Lookups that must agree on a move", "A move is announced when this many lookups in a row say the same.", 1, 5, after + 3);
-		AddNumberField(schema, "min_refresh_seconds", "Lookups at most every (seconds)", "However often a program asks.", 10, 3600, after + 4);
+		AddNumberField(schema, "interval_minutes", "Look again every (minutes)", "Also when the network changes.", 5, 1440, 4);
+		AddNumberField(schema, "min_move_km", "The same place within (km)", "A new fix within this distance of the announced one is the same place.", 1, 500, 5);
+		AddNumberField(schema, "confirmations", "Lookups that must agree on a move", "A move is announced when this many lookups in a row say the same.", 1, 5, 6);
+		AddNumberField(schema, "min_refresh_seconds", "Lookups at most every (seconds)", "However often a program asks.", 10, 3600, 7);
 	}
 
 	// the defaults: what Defaults puts back (every program without a limit of its own)
@@ -229,9 +271,12 @@ DescribeSettings(const Settings& settings, const std::vector<SeenProgram>& seen,
 		FillValues(withoutRules, seen, defaults, NULL);
 		// (the programs that are only in the rules, not seen, are listed too, with no limit)
 		for (const Settings::ProgramRule& rule : settings.programs) {
-			const std::string name = ProgramFieldName(rule.signature);
-			if (!defaults->HasString(name.c_str()))
-				defaults->AddString(name.c_str(), kProgramDefault);
+			bool listed = false;
+			BMessage row;
+			for (int32 i = 0; defaults->FindMessage(kPrograms, i, &row) == B_OK; i++)
+				listed = listed || row.GetString("program", "") == rule.signature;
+			if (!listed)
+				AddProgramRow(defaults, withoutRules, rule.signature, NameOf(rule.signature));
 		}
 	}
 }
@@ -284,8 +329,61 @@ ApplyProgram(Settings* settings, const std::string& signature, const char* level
 }
 
 
+// The cell of the table that a path key names: `programs_03.level` (row 3, column `level`), or `programs.level` when there is a single row.
+static bool
+ParseCellKey(const std::string& name, int32* row, std::string* column)
+{
+	const size_t length = strlen(kPrograms);
+	if (name.compare(0, length, kPrograms) != 0)
+		return false;
+	size_t at = length;
+	*row = 0;
+	if (at < name.size() && name[at] == '_') {
+		at++;
+		const size_t digits = name.find('.', at);
+		if (digits == std::string::npos || digits == at || digits - at > 9)
+			return false;
+		for (size_t i = at; i < digits; i++) {
+			if (name[i] < '0' || name[i] > '9')
+				return false;
+		}
+		*row = (int32)strtol(name.substr(at, digits - at).c_str(), NULL, 10);
+		at = digits;
+	}
+	if (at >= name.size() || name[at] != '.' || at + 1 >= name.size())
+		return false;
+	*column = name.substr(at + 1);
+	return true;
+}
+
+
+// a program may know nothing: its rule says `none`
+static bool
+IsRefused(const Settings* settings, const std::string& signature)
+{
+	const Settings::ProgramRule* rule = settings->FindProgram(signature);
+	return rule != NULL && rule->limit.IsNone();
+}
+
+
+static bool
+ApplyAllowed(Settings* settings, const std::string& signature, bool allowed)
+{
+	if (signature.empty())
+		return false;
+	if (!allowed) {
+		Granularity none;
+		ParseGranularity("none", &none);
+		settings->SetProgram(signature, none);
+	} else if (IsRefused(settings, signature)) {
+		settings->RemoveProgram(signature);		// (it is as the others again)
+	}
+	return true;
+}
+
+
 status_t
-ApplySettingsChanges(Settings* settings, const BMessage& changes, std::vector<std::string>* refused)
+ApplySettingsChanges(Settings* settings, const BMessage& changes, std::vector<std::string>* refused, const std::vector<std::string>& rows)
 {
 	bool allValid = true;
 	auto refuse = [&](const std::string& name) {
@@ -349,6 +447,40 @@ ApplySettingsChanges(Settings* settings, const BMessage& changes, std::vector<st
 			} else {
 				settings->minRefreshSeconds = value;
 			}
+		} else if (name == kPrograms && type == B_MESSAGE_TYPE) {
+			// the whole table (Revert, Defaults): every row says what its program may know; a program that is not in it has no limit of its own any more
+			for (int32 v = 0; v < count; v++) {
+				BMessage row;
+				if (changes.FindMessage(rawName, v, &row) != B_OK)
+					continue;
+				const std::string signature = row.GetString("program", "");
+				sentPrograms.insert(signature);
+				bool valid = !signature.empty();
+				if (valid && !row.GetBool("allowed", true))
+					valid = ApplyAllowed(settings, signature, false);
+				else if (valid)
+					valid = ApplyProgram(settings, signature, row.GetString("level", kProgramDefault));
+				if (!valid)
+					refuse(name);
+			}
+		} else if (name.compare(0, strlen(kPrograms), kPrograms) == 0) {
+			// a cell of the table (`programs_03.level`): the row is the number that it had in the last description
+			int32 row = 0;
+			std::string column;
+			if (!ParseCellKey(name, &row, &column) || row < 0 || row >= (int32)rows.size()) {
+				refuse(name);
+				continue;
+			}
+			const std::string& signature = rows[row];
+			sentPrograms.insert(signature);
+			bool valid = false;
+			bool on = true;
+			if (column == "allowed" && changes.FindBool(rawName, &on) == B_OK)
+				valid = ApplyAllowed(settings, signature, on);
+			else if (column == "level")
+				valid = ApplyProgram(settings, signature, changes.GetString(rawName, ""));
+			if (!valid)
+				refuse(name);
 		} else if (!SignatureOfField(name).empty()) {
 			const std::string signature = SignatureOfField(name);
 			sentPrograms.insert(signature);
