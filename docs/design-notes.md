@@ -15,7 +15,7 @@ constants and the field names of the spec are unchanged; fields were added, none
 
 | Spec | Prototype | Why |
 |---|---|---|
-| zero configuration, the first lookup is silent | **asks once** (*Not now / Never / Allow*), stored in `~/config/settings/location_server`; `network_lookup never` | an IP lookup tells a third party the public address and, with it, the town. SEN does not send positions anywhere without the user's say (SUESS: *Use GPS location*). The asking is the one thing that makes the zero-configuration start honest |
+| zero configuration, the first lookup is silent | **asks once** (*Not now / Never / Allow*), stored in `~/config/settings/location_server`; `network_lookup never` | an IP lookup tells a third party the public address and, with it, the town. SEN does not send positions anywhere without the user's say (Spaces: *Use GPS location*). The asking is the one thing that makes the zero-configuration start honest |
 | `ip-api.com` as the keyless default | `ipwho.is`, `geojs.io`, `ipinfo.io` (all https), asked in turn until one answers; `ip-api` only if named | the free plan of ip-api is **http only** (the answer can be read and changed on the way) and for non-commercial use. In a test today `ipapi.co` answered 429 on the first request and `freeipapi.com` redirected, so a list with a fallback is needed anyway |
 | a change is announced when the coordinates "drift beyond a threshold or the city changes" | **a change needs two lookups in a row that agree**, and is compared by distance and country, never by name | different services place the same address in different districts and spell the city differently ("Wien", "Vienna"); a mobile network or a VPN can put the machine in another city for one lookup. Without this a context would switch back and forth. The announced fix is not replaced by a nearby one, so the name stays. 96 checks in `tests/CoreTest.cpp` |
 | polling every 15 to 30 minutes | 30 minutes **and** a change of the network (`start_watching_network`, debounced by 8 s), and never more than once in `min_refresh_seconds` (60) | a new network is the moment the place changes; a timer alone notices it half an hour later or never |
@@ -65,7 +65,7 @@ A context without a place can say where it is by itself (`SEN:contextRegion`: a 
 while it is current joins it (beta 5): that is why the default must be a suggestion. A context that switches itself on a wrong IP lookup would put the wrong files into the wrong
 project.
 
-**2. Places that are found where you are.** The enricher (SUESS) ranks the answers of a search by the distance to the position of the file, and uses no position that is not the file's.
+**2. Places that are found where you are.** The enricher (Spaces) ranks the answers of a search by the distance to the position of the file, and uses no position that is not the file's.
 With Basho it can use the **fix of the machine as the position of a file that has none**, only for the ranking and only on the machine: nothing is sent, so there is nothing new to ask. A
 *Westbahnhof* without a city then comes out as the one in Vienna for a user who is in Vienna, and the one in Budapest for a user who is in Budapest, with the other still in the list. The `country`
 of the fix could also be the soft default of the search when the file names none, but that would send the country (a little), so it should be a setting, off by default.
