@@ -243,7 +243,7 @@ DescribeSettings(const Settings& settings, const std::vector<SeenProgram>& seen,
 		if (!access) {
 			BMessage lookup;
 			lookup.AddString(kLabel, "Allow accessing my location?");
-			lookup.AddString(kHelp, "A lookup sends the public address of this computer to a service on the internet (see the services below). Ask me: the window is shown the first time. Never: only a position that is set by hand is used.");
+			lookup.AddString(kHelp, "A lookup sends the public address of this computer to a service. Never: only a position set by hand is used.");
 			lookup.AddString(kKind, "choice");
 			for (const char* value : {"ask", "allow", "never"})
 				lookup.AddString(kChoices, value);
@@ -256,7 +256,7 @@ DescribeSettings(const Settings& settings, const std::vector<SeenProgram>& seen,
 			BMessage show;
 			show.AddString(kLabel, "Show Location now");
 			show.AddString("shows", kWhere);
-			show.AddString(kHelp, "Looks the place up now (if the lookup is allowed) and shows what the server found, with how and when, the same as it would tell a program that may know everything.");
+			show.AddString(kHelp, "Looks the place up now and shows what the server found.");
 			show.AddString(kKind, "button");
 			show.AddInt32(kOrder, 1);
 			schema->AddMessage(kShowLocation, &show);
@@ -270,7 +270,7 @@ DescribeSettings(const Settings& settings, const std::vector<SeenProgram>& seen,
 
 			BMessage precision;
 			precision.AddString(kLabel, "Programs may know");
-			precision.AddString(kHelp, "The finest location that programs are told, unless they have a limit of their own (see Application access). A program can ask for less than this, never for more. The server keeps the finest fix it has.");
+			precision.AddString(kHelp, "The finest location that programs are told. A program can ask for less, never for more.");
 			precision.AddString(kKind, "choice");
 			AddLevels(&precision, false, GranularityName(settings.maxPrecision), "");
 			precision.AddInt32(kOrder, 3);
@@ -279,7 +279,7 @@ DescribeSettings(const Settings& settings, const std::vector<SeenProgram>& seen,
 			// the services that are asked: a box for each, in the order of the list; the first that answers wins
 			BMessage services;
 			services.AddString(kLabel, "Lookup services");
-			services.AddString(kHelp, "The services that are asked, in this order, until one answers: drag a row to change the order. At least one stays on. A service that answers over http only can be read on the way: it is off unless you switch it on.");
+			services.AddString(kHelp, "Asked in this order until one answers. Drag a row to move it. A service over http only is off unless you switch it on.");
 			services.AddString(kKind, "table");
 			services.AddBool("reorderable", true);
 			services.AddInt32(kOrder, 5);
@@ -318,7 +318,7 @@ DescribeSettings(const Settings& settings, const std::vector<SeenProgram>& seen,
 			// the programs that have asked: a table with a check box for each (may it know where I am at all) and the finest level it may know; the table is there also while it is empty
 			BMessage table;
 			table.AddString(kLabel, "Applications with access to your location");
-			table.AddString(kHelp, "Click a box to allow or refuse a program, click a level to choose how much it may know. A change counts at once, also for a program that is asking already. A program is listed when it has asked for the first time.");
+			table.AddString(kHelp, "Click a box to allow or refuse a program, a level to set how much it may know. A program is listed after its first request.");
 			table.AddString(kKind, "table");
 			table.AddInt32(kOrder, 4);
 			schema->AddMessage(kPrograms, &table);
