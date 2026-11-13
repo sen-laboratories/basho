@@ -132,13 +132,25 @@ NameOf(const std::string& signature)
 
 // The programs of the table: those that have a rule, and those that have asked, in the order of their names (an order that does not depend on the rules, so that a row stays
 // where it is while it is changed; the change of a cell names its row by the number it had in the last description).
+// The command `location` is part of Basho and is no program that a person decides about: the server is set under Location, the command shows what the server knows. It is not listed.
+static bool
+IsPartOfBasho(const std::string& signature)
+{
+	return signature == "application/x-vnd.basho-location_tool" || signature == "application/x-vnd.basho-location_server";
+}
+
+
 static std::vector<std::pair<std::string, std::string>>
 ListPrograms(const Settings& settings, const std::vector<SeenProgram>& seen)
 {
 	std::vector<std::pair<std::string, std::string>> listed;		// signature, name
-	for (const Settings::ProgramRule& rule : settings.programs)
-		listed.push_back({rule.signature, NameOf(rule.signature)});
+	for (const Settings::ProgramRule& rule : settings.programs) {
+		if (!IsPartOfBasho(rule.signature))
+			listed.push_back({rule.signature, NameOf(rule.signature)});
+	}
 	for (const SeenProgram& program : seen) {
+		if (IsPartOfBasho(program.signature))
+			continue;
 		auto same = [&](const std::pair<std::string, std::string>& p) { return p.first == program.signature; };
 		auto found = std::find_if(listed.begin(), listed.end(), same);
 		if (found == listed.end())
@@ -159,7 +171,7 @@ ListPrograms(const Settings& settings, const std::vector<SeenProgram>& seen)
 }
 
 
-// One row: the name to show, the signature (hidden), whether the program may know anything, and its level (`default`: as the others)
+// One row: the name to show, the signature (hidden), whether the program may know anything, and its level (`default`: the level that is set for all programs)
 static void
 AddProgramRow(BMessage* values, const Settings& settings, const std::string& signature, const std::string& name)
 {
@@ -341,9 +353,9 @@ DescribeSettings(const Settings& settings, const std::vector<SeenProgram>& seen,
 
 			BMessage level;
 			level.AddString(kLabel, "May know");
-			level.AddString(kHelp, "The finest location this program is told. As the others: what is set under Location.");
+			level.AddString(kHelp, "The finest location this program is told. Default: what is set under Location.");
 			level.AddString(kKind, "choice");
-			AddLevels(&level, true, "city", "As the others");
+			AddLevels(&level, true, "city", "Default");
 			level.AddString(kEnabledWhen, "allowed=true");
 			level.AddInt32(kOrder, 2);
 			schema->AddMessage("programs.level", &level);
@@ -357,6 +369,8 @@ DescribeSettings(const Settings& settings, const std::vector<SeenProgram>& seen,
 		// (the programs that are only in the rules, not seen, are listed too, with no limit)
 		if (access) {
 			for (const Settings::ProgramRule& rule : settings.programs) {
+				if (IsPartOfBasho(rule.signature))
+					continue;
 				bool listed = false;
 				BMessage row;
 				for (int32 i = 0; defaults->FindMessage(kPrograms, i, &row) == B_OK; i++)
